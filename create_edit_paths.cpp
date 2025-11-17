@@ -56,11 +56,12 @@ int main(int argc, const char * argv[]) {
             num_mappings = std::stoi(argv[i+1]);
             ++i;
         }
-        else if (std::string(argv[i]) == "-source_id") {
+        // if in source_id or source
+        else if (std::string(argv[i]) == "-source_id" || std::string(argv[i]) == "-source") {
             source_id = std::stoi(argv[i+1]);
             ++i;
         }
-        else if (std::string(argv[i]) == "-target_id") {
+        else if (std::string(argv[i]) == "-target_id" || std::string(argv[i]) == "-target") {
             target_id = std::stoi(argv[i+1]);
             ++i;
         }
