@@ -170,19 +170,7 @@ else
   fi
 fi
 
-# analyze the edit path graphs
-if [[ -x "build/AnalyzePaths" ]]; then
-  echo "Analyzing path graphs..."
-  cd build || exit 1
-  ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy Rnd
-  ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy Rnd_d-IsoN
-  ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy i-E_d-IsoN
-  ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy d-E_d-IsoN
-  cd .. || exit 1
-else
-  echo "Error: build/AnalyzePaths not found or not executable. Did the build succeed?"
-  exit 1
-fi
+
 
 # convert the generated path graphs to pytorch-geometric format
 echo "Converting path graphs to pytorch-geometric format..."
@@ -197,3 +185,18 @@ python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --meth
 python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method F2 --path_strategy Rnd_d-IsoN
 python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method F2 --path_strategy i-E_d-IsoN
 python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method F2 --path_strategy d-E_d-IsoN
+
+
+# analyze the edit path graphs
+if [[ -x "build/AnalyzePaths" ]]; then
+  echo "Analyzing path graphs..."
+  cd build || exit 1
+  ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy Rnd
+  ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy Rnd_d-IsoN
+  ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy i-E_d-IsoN
+  ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy d-E_d-IsoN
+  cd .. || exit 1
+else
+  echo "Error: build/AnalyzePaths not found or not executable. Did the build succeed?"
+  exit 1
+fi
