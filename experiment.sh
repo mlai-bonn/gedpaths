@@ -197,7 +197,3 @@ python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --meth
 python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method F2 --path_strategy Rnd_d-IsoN
 python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method F2 --path_strategy i-E_d-IsoN
 python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method F2 --path_strategy d-E_d-IsoN
-
-# plot a an example edit path
-echo "Plotting example edit paths..."
-python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy Rnd --source_id 0 --target_id 3
