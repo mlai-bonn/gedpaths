@@ -4,6 +4,15 @@ Repo that builds up on the libgraph and uses the GEDLIB to create edit paths bet
 ## Installation
 See [INSTALLATION.md](INSTALLATION.md) for all dependencies and detailed setup instructions.
 
+
+## Run experiments
+
+Use the provided experiment.sh script to run all experiments:
+```bash
+chmod u+x experiment.sh
+./experiment.sh -db MUTAG
+```
+
 ## Usage
 
 ### 1. Compute Mappings

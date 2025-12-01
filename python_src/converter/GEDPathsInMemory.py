@@ -22,11 +22,11 @@ seq = ds.get_path_graphs(0, 1)
 from __future__ import annotations
 from collections import defaultdict
 from typing import Dict, List, Tuple, cast, Any, Optional
-
-from python_src.converter.torch_geometric_exporter import BGFInMemoryDataset
 from torch_geometric.data import Data
 from dataclasses import dataclass
 import os
+
+from .torch_geometric_exporter import BGFInMemoryDataset
 
 
 @dataclass

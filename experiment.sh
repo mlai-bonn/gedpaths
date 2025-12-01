@@ -6,7 +6,7 @@ set -euo pipefail
 
 # Defaults
 DB_NAME="MUTAG"
-VENV_PATH=".venv"
+VENV_PATH="venv"
 RECOMPILE="no"
 RECOMPILE_THREADS=""
 ONLY_EVAL="no"
@@ -82,17 +82,37 @@ echo "Using virtual environment path: ${VENV_PATH}"
 if [[ ! -f "${VENV_PATH}/bin/activate" ]]; then
   read -r -p "Virtual environment not found at ${VENV_PATH}. Create it? (y/n) " response
   if [[ "${response}" =~ ^([yY][eE][sS]|[yY])$ ]]; then
-    python3 -m venv "${VENV_PATH}"
+    echo "Creating virtual environment using python_src/install.sh..."
+    # Run the provided installer script which creates a venv in python_src/venv
+    if [[ -f "python_src/install.sh" ]]; then
+      # Ensure the installer is executable before running it
+      chmod u+x python_src/install.sh
+      bash python_src/install.sh
+    else
+      echo "Error: python_src/install.sh not found. Cannot create virtual environment."
+      exit 1
+    fi
+
+    PY_SRC_VENV="$(pwd)/venv"
+    if [[ ! -d "${PY_SRC_VENV}" ]]; then
+      echo "Error: install script did not create ${PY_SRC_VENV}."
+      exit 1
+    fi
+
+    # If the requested VENV_PATH differs from python_src/venv, create a symlink
+    if [[ "${VENV_PATH}" != "venv" && "${VENV_PATH}" != "${PY_SRC_VENV}" ]]; then
+      if [[ -e "${VENV_PATH}" ]]; then
+        echo "Note: requested VENV_PATH ${VENV_PATH} already exists and will be used."
+      else
+        ln -s "${PY_SRC_VENV}" "${VENV_PATH}"
+        echo "Created symlink ${VENV_PATH} -> ${PY_SRC_VENV}"
+      fi
+    fi
+
     # shellcheck source=/dev/null
     source "${VENV_PATH}/bin/activate"
-    pip install --upgrade pip
-    if [[ -f "python_src/requirements.txt" ]]; then
-      pip install -r python_src/requirements.txt
-    else
-      echo "Warning: python_src/requirements.txt not found. Skipping pip install."
-    fi
   else
-    echo "Please create a virtual environment at ${VENV_PATH} and install the required packages from python_src/requirements.txt"
+    echo "Please create a virtual environment at ${VENV_PATH} and install the required packages by running python_src/install.sh"
     exit 1
   fi
 else
@@ -184,12 +204,19 @@ else
   exit 1
 fi
 
+
+# Ensure repository root is on PYTHONPATH so scripts under python_src can import the package
+# Use a safe expansion so `set -u` (nounset) does not fail when PYTHONPATH is unset
+export PYTHONPATH="$(pwd)${PYTHONPATH:+:}${PYTHONPATH:-}"
+
 # convert the generated path graphs to pytorch-geometric format
 echo "Converting path graphs to pytorch-geometric format..."
 python python_src/converter/bgf_to_pt.py --db "${DB_NAME}" --method F2 --path_strategy Rnd
 python python_src/converter/bgf_to_pt.py --db "${DB_NAME}" --method F2 --path_strategy Rnd_d-IsoN
 python python_src/converter/bgf_to_pt.py --db "${DB_NAME}" --method F2 --path_strategy i-E_d-IsoN
 python python_src/converter/bgf_to_pt.py --db "${DB_NAME}" --method F2 --path_strategy d-E_d-IsoN
+
+
 
 # plot the statistics with python
 echo "Plotting statistics..."
@@ -198,6 +225,17 @@ python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --meth
 python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method F2 --path_strategy i-E_d-IsoN
 python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method F2 --path_strategy d-E_d-IsoN
 
+# do wl analysis of the dataset graphs
+echo "Performing WL analysis of dataset graphs..."
+python python_src/wl_analysis.py -db "${DB_NAME}" -s Rnd
+python python_src/wl_analysis.py -db "${DB_NAME}" -s Rnd_d-IsoN
+python python_src/wl_analysis.py -db "${DB_NAME}" -s i-E_d-IsoN
+python python_src/wl_analysis.py -db "${DB_NAME}" -s d-E_d-IsoN
+
+
 # plot a an example edit path
 echo "Plotting example edit paths..."
-python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy Rnd --source_id 0 --target_id 3
+python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy Rnd --start 3 --end 77
+python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy Rnd_d-IsoN --start 3 --end 77
+python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy i-E_d-IsoN --start 3 --end 77
+python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy d-E_d-IsoN --start 3 --end 77

@@ -750,7 +750,7 @@ def plot_edit_path(graphs, edit_ops, output=None, show_labels=True, one_fig_per_
         # draw network nodes borders for operations (nodes with bigger sizes)
         hex_white = mpl.colors.to_hex(mpl.colors.to_rgb('black'))
         border_colors = [hex_white for _ in G.nodes()]
-        border_factor = 3
+        border_factor = 4
         node_sizes = [standard_node_size for _ in G.nodes()]
         if op is not None:
             if op_type in ('DELETE', 'node_delete', 'Delete'):

@@ -26,11 +26,11 @@ def main():
     parser.add_argument('--show', action='store_true', help='Display plot interactively')
     parser.add_argument('--start', type=int, default=0, help='Start index for paths (default: 3)')
     parser.add_argument('--end', type=int, default=55, help='End index for paths (default: 77)')
-    parser.add_argument('--node-size', dest='node_size', type=int, default=200,
+    parser.add_argument('--node-size', dest='node_size', type=int, default=800,
                         help='Default node marker size for plots (default: %(default)s)')
-    parser.add_argument('--edge-width', dest='edge_width', type=float, default=1.0,
+    parser.add_argument('--edge-width', dest='edge_width', type=float, default=10.0,
                         help='Default edge width for highlighted edges/text (default: %(default)s)')
-    parser.add_argument('--red-font-size', dest='red_font_size', type=int, default=20,
+    parser.add_argument('--red-font-size', dest='red_font_size', type=int, default=30,
                         help='Font size for red node id labels (default: %(default)s)')
     args = parser.parse_args()
 
