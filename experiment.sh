@@ -10,6 +10,7 @@ VENV_PATH="venv"
 RECOMPILE="no"
 RECOMPILE_THREADS=""
 ONLY_EVAL="no"
+ONLY_PYTHON="no"
 
 usage() {
   cat <<EOF
@@ -20,6 +21,7 @@ Options:
   -env <venv_path>     Path to virtual environment (default: ${VENV_PATH})
   -recompile [threads] Recompile the C++ code (optional threads). If threads omitted, defaults to half of available CPUs.
   -only_evaluation     Only run evaluation/analysis (don't compute mappings or paths)
+  -only_python         Only run Python evaluation/visualization steps (skip C++ build and executables)
   -h, --help           Show this help message
 EOF
 }
@@ -61,6 +63,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     -only_evaluation|--only-evaluation)
       ONLY_EVAL="yes"
+      shift
+      ;;
+    -only_python|--only-python)
+      ONLY_PYTHON="yes"
       shift
       ;;
     -h|--help)
@@ -120,8 +126,8 @@ else
   source "${VENV_PATH}/bin/activate"
 fi
 
-# Recompile C++ code if requested or if build dir missing
-if [[ "${RECOMPILE}" == "recompile" || ! -d "build" ]]; then
+# Recompile C++ code if requested or if build dir missing (skip when ONLY_PYTHON)
+if [[ "${ONLY_PYTHON}" != "yes" && ( "${RECOMPILE}" == "recompile" || ! -d "build" ) ]]; then
   echo "Recompiling the C++ code..."
   rm -rf build
   mkdir build
@@ -146,7 +152,9 @@ fi
 python python_src/data_loader.py -db "${DB_NAME}"
 
 # create the mappings for 5000 random pairs of graphs
-if [[ "${ONLY_EVAL}" == "yes" ]]; then
+if [[ "${ONLY_PYTHON}" == "yes" ]]; then
+  echo "only_python: skipping CreateMappings"
+elif [[ "${ONLY_EVAL}" == "yes" ]]; then
   echo "only_evaluation: skipping CreateMappings"
 else
   if [[ -x "build/CreateMappings" ]]; then
@@ -160,20 +168,26 @@ else
 fi
 
 # analyze the created mappings
-if [[ -x "build/AnalyzeMappings" ]]; then
-  echo "Analyzing mappings..."
-  cd build || exit 1
-  ./AnalyzeMappings -db "${DB_NAME}" -method F2
-  cd .. || exit 1
+if [[ "${ONLY_PYTHON}" == "yes" ]]; then
+  echo "only_python: skipping AnalyzeMappings"
 else
-  echo "Error: build/AnalyzeMappings not found or not executable. Did the build succeed?"
-  exit 1
+  if [[ -x "build/AnalyzeMappings" ]]; then
+    echo "Analyzing mappings..."
+    cd build || exit 1
+    ./AnalyzeMappings -db "${DB_NAME}" -method F2
+    cd .. || exit 1
+  else
+    echo "Error: build/AnalyzeMappings not found or not executable. Did the build succeed?"
+    exit 1
+  fi
 fi
 
 
 
 # create the paths with different strategies
-if [[ "${ONLY_EVAL}" == "yes" ]]; then
+if [[ "${ONLY_PYTHON}" == "yes" ]]; then
+  echo "only_python: skipping CreatePaths"
+elif [[ "${ONLY_EVAL}" == "yes" ]]; then
   echo "only_evaluation: skipping CreatePaths"
 else
   echo "Creating path graphs with different strategies..."
@@ -191,17 +205,21 @@ else
 fi
 
 # analyze the edit path graphs
-if [[ -x "build/AnalyzePaths" ]]; then
-  echo "Analyzing path graphs..."
-  cd build || exit 1
-  ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy Rnd
-  ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy Rnd_d-IsoN
-  ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy i-E_d-IsoN
-  ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy d-E_d-IsoN
-  cd .. || exit 1
+if [[ "${ONLY_PYTHON}" == "yes" ]]; then
+  echo "only_python: skipping AnalyzePaths"
 else
-  echo "Error: build/AnalyzePaths not found or not executable. Did the build succeed?"
-  exit 1
+  if [[ -x "build/AnalyzePaths" ]]; then
+    echo "Analyzing path graphs..."
+    cd build || exit 1
+    ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy Rnd
+    ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy Rnd_d-IsoN
+    ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy i-E_d-IsoN
+    ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy d-E_d-IsoN
+    cd .. || exit 1
+  else
+    echo "Error: build/AnalyzePaths not found or not executable. Did the build succeed?"
+    exit 1
+  fi
 fi
 
 
@@ -239,3 +257,6 @@ python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 
 python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy Rnd_d-IsoN --start 3 --end 77
 python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy i-E_d-IsoN --start 3 --end 77
 python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy d-E_d-IsoN --start 3 --end 77
+
+
+
