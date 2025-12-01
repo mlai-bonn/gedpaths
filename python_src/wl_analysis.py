@@ -49,6 +49,13 @@ def main():
     else:
         bgf_path = f"Results/Paths_{strategy}/F2/{db_name}/{db_name}_edit_paths.bgf"
 
+    db_name = "NCI1"
+    strategy = "Rnd_d-IsoN"
+    #173897
+    #174214
+    #174481
+    #174941
+    bgf_path = f"Results/Paths_{strategy}/F2/{db_name}/{db_name}_edit_paths.bgf"
     edit_operation_path = f"Results/Paths_{strategy}/F2/{db_name}/{db_name}_edit_paths_data.txt"
     # Use the directory containing the bgf as the dataset root so the processed file
     # will be written to <root>/processed/data.pt

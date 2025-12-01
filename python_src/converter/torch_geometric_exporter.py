@@ -279,8 +279,9 @@ def bgf_to_pyg_data_list(
             d.node_attributes = torch.Tensor()
             pnl = raw_data['primary_node_labels'][i]
             pel = raw_data['primary_edge_labels'][i]
-            d.primary_node_labels = torch.from_numpy(pnl).type(torch.long) if pnl is not None else None
-            d.primary_edge_labels = torch.from_numpy(pel).type(torch.long) if pel is not None else None
+            d.primary_node_labels = torch.from_numpy(pnl).type(torch.long) if pnl is not None else torch.Tensor()
+            d.primary_edge_labels = torch.from_numpy(pel).type(torch.long) if pel is not None else torch.Tensor()
+            d.edge_attributes = torch.Tensor()
             # add zero labels
             # split the name into start graph end graph and edit step
             bgf_name_parts = h.name.split("_")
