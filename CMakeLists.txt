@@ -46,6 +46,8 @@ add_executable(AnalyzeMappings analyze_mappings.cpp ${LIBGRAPH_ROOT}/include/lib
         src/include.h)
 add_executable(Test test.cpp ${LIBGRAPH_ROOT}/include/libGraph.h ${GEDLIB_ROOT}/src/env/ged_env.hpp
         src/include.h)
+add_executable(TestLINUX test_linux.cpp)
+add_executable(ConvertPrecomputed convert_precomputed.cpp ${LIBGRAPH_ROOT}/include/libGraph.h src/include.h)
 
 target_link_libraries(CreateMappings libsvm.so libnomad.so libdoublefann.so.2 gurobi)
 target_link_libraries(CreatePaths libsvm.so libnomad.so libdoublefann.so.2 gurobi)
