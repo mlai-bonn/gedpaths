@@ -2,7 +2,7 @@ from os.path import dirname
 import argparse
 
 
-def main(strategy: str, method: str = "F2", database: str = "MUTAG"):
+def main(strategy: str, method: str = "F2", database: str = "MUTAG", bgf_path: str = ""):
     """Convert a BGF file to a torch_geometric InMemoryDataset using the given strategy name.
 
     The script expects the BGF file to be at: Results/Paths_{strategy}/{method}/{database}/{database}_edit_paths.bgf
@@ -15,15 +15,26 @@ def main(strategy: str, method: str = "F2", database: str = "MUTAG"):
         sys.path.insert(0, project_root)
 
     # import the dataset wrapper lazily (avoids importing heavy deps on --help)
-    from python_src.converter.torch_geometric_exporter import BGFInMemoryDataset
+    from python_src.converter.bgf_to_torch_geometric import BGFInMemoryDataset
 
-    bgf_path = f"Results/Paths_{strategy}/{method}/{database}/{database}_edit_paths.bgf"
-    print(f"Using strategy: {strategy}")
-    print(f"Looking for BGF at: {bgf_path}")
 
-    # Use the directory containing the bgf as the dataset root so the processed file
-    # will be written to <root>/processed/data.pt
-    root_dir = dirname(bgf_path) or "."
+    if bgf_path == "":
+        bgf_path = f"Results/Paths_{strategy}/{method}/{database}/{database}_edit_paths.bgf"
+        # Use the directory containing the bgf as the dataset root so the processed file
+        # will be written to <root>/processed/data.pt
+        root_dir = dirname(bgf_path) or "."
+        print(f"Using strategy: {strategy}")
+        print(f"Looking for BGF at: {bgf_path}")
+    else:
+        # add database name to bgf_path if not already present
+        root_dir = bgf_path + "/" + database
+        # if root_dir does not exist, create it
+        os.makedirs(root_dir, exist_ok=True)
+        bgf_path += f"{database}.bgf"
+
+        print(f"Using explicit BGF path: {bgf_path}")
+
+
 
     ds = BGFInMemoryDataset(root=root_dir, path=bgf_path)
     print(f"Processed dataset stored at: {ds.processed_paths[0]}")
@@ -74,5 +85,13 @@ if __name__ == "__main__":
             "Default: 'F2'."
         ),
     )
+    parser.add_argument(
+        "--bgf-path",
+        dest="bgf_path",
+        default="",
+        help=(
+            "Optional explicit path to the .bgf file (overrides strategy/method/database)."
+        ),
+    )
     args = parser.parse_args()
-    main(args.strategy, args.method, args.database)
+    main(args.strategy, args.method, args.database, args.bgf_path)

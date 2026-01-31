@@ -2,7 +2,7 @@ import os
 from os.path import dirname
 
 from python_src.converter.GEDPathsInMemory import GEDPathsInMemoryDataset
-from python_src.converter.torch_geometric_exporter import BGFInMemoryDataset
+from python_src.converter.bgf_to_torch_geometric import BGFInMemoryDataset
 from torch_geometric.utils import to_networkx
 import networkx as nx
 import argparse

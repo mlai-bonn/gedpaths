@@ -40,7 +40,7 @@ inline int create_edit_paths( const std::string& db,
     }
 
     GraphData<UDataGraph> graphs;
-    LoadSaveGraphDatasets::LoadPreprocessedTUDortmundGraphData(db, processed_graph_path, graphs);
+    LoadSaveGraphDatasets::LoadPreprocessedGraphData(db, processed_graph_path, graphs);
 
 
     // load mappings

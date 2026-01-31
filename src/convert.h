@@ -88,7 +88,6 @@ inline int ConvertPrecomputedMatchingsToBin(const std::string &matching_dir,
     ifs.seekg(0, std::ios::beg);
 
     while (std::getline(ifs, line)) {
-
         // print progress every 1000 lines
         if (line_no % 1000 == 0) {
             std::cout << "Processing line " << line_no << " / " << total_lines << "\r" << std::endl;

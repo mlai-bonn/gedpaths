@@ -78,7 +78,7 @@ inline int analyze_mappings(const std::string& db,
 
     // Load graphs (function returns void in this codebase; mimic usage in other tools)
     GraphData<UDataGraph> graphs;
-    LoadSaveGraphDatasets::LoadPreprocessedTUDortmundGraphData(db, processed_graph_path, graphs);
+    LoadSaveGraphDatasets::LoadPreprocessedGraphData(db, processed_graph_path, graphs);
     if (graphs.graphData.empty()) {
         std::cerr << "No graphs loaded for db='" << db << "' from '" << processed_graph_path << "'\n";
         return 1;

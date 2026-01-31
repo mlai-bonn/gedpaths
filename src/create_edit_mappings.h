@@ -220,7 +220,7 @@ inline int create_edit_mappings(const std::string& db,
         return 1;
     }
     GraphData<UDataGraph> graphs;
-    LoadSaveGraphDatasets::LoadPreprocessedTUDortmundGraphData(db, processed_graph_path, graphs);
+    LoadSaveGraphDatasets::LoadPreprocessedGraphData(db, processed_graph_path, graphs);
     std::vector<std::pair<INDEX, INDEX>> graph_pairs;
     std::vector<std::pair<INDEX, INDEX>> existing_pairs;
 
@@ -310,7 +310,8 @@ inline int create_edit_mappings(const std::string& db,
     MergeGEDResults(output_path + db + "/tmp/", output_path + db + "/", search_string, graphs);
     // load mappings
     results.clear();
-    BinaryToGEDResult(output_path + db + "/" + db + "_ged_mapping.bin", graphs, results);
+    const std::string path = output_path + db + "/" + db + "_ged_mapping.bin";
+    BinaryToGEDResult(path, graphs, results);
     // Fix invalid mappings that are still present (due to parallel execution issues in gedlib)
     fixInvalidMappings(results, graphs, edit_cost, ged_method, method_options);
     // save the updated results back to binary

@@ -26,7 +26,7 @@ from torch_geometric.data import Data
 from dataclasses import dataclass
 import os
 
-from .torch_geometric_exporter import BGFInMemoryDataset
+from .bgf_to_torch_geometric import BGFInMemoryDataset
 
 
 @dataclass
