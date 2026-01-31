@@ -5,3 +5,6 @@
 /Data/
 .idea/
 /venv/
+
+# Auto Claude data directory
+.auto-claude/
