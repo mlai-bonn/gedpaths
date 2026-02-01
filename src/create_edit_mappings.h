@@ -11,8 +11,17 @@
 #define GEDPATHS_CREATE_EDIT_MAPPINGS_H
 #include <utility>
 #include <vector>
+#include <unordered_set>
+#include <stdexcept>
 #include <libGraph.h>
 #include <src/env/ged_env.hpp>
+
+// helper for pair hash (enables O(1) lookups for pair-based containers)
+struct PairHash {
+    std::size_t operator()(const std::pair<INDEX, INDEX>& p) const noexcept {
+        return std::hash<long long>()((static_cast<long long>(p.first) << 32) ^ static_cast<long long>(p.second));
+    }
+};
 
 int create_edit_mappings(const std::string& db,
                             const std::string& output_path,
@@ -33,8 +42,7 @@ GEDEvaluation<UDataGraph> create_edit_mappings_single(INDEX source_id, INDEX tar
 
 inline GEDEvaluation<UDataGraph> create_edit_mappings_single(INDEX source_id, INDEX target_id, GraphData<UDataGraph>& graphs, ged::Options::EditCosts edit_cost, ged::Options::GEDMethod ged_method, const std::string& method_options, bool print) {
     if (source_id >= graphs.graphData.size() || target_id >= graphs.graphData.size()) {
-        std::cerr << "Single source/target IDs out of range: " << source_id << ", " << target_id << std::endl;
-        exit(1);
+        throw std::out_of_range("Single source/target IDs out of range: " + std::to_string(source_id) + ", " + std::to_string(target_id));
     }
     std::pair<INDEX, INDEX> pair = std::minmax(source_id, target_id);
     std::vector<std::pair<INDEX, INDEX>> single_pair{pair};
@@ -103,6 +111,7 @@ inline void fixInvalidMappings(std::vector<GEDEvaluation<UDataGraph>>& results,
     // recalulate the mappings for the invalid results
     std::cout << "Recalculating mappings for invalid results...\n";
     std::vector<std::pair<INDEX, GEDEvaluation<UDataGraph>>> fixed_results;
+    fixed_results.reserve(invalid_mappings.size());
     for (const auto &id : invalid_mappings) {
         auto source_id = results[id].graph_ids.first;
         auto target_id = results[id].graph_ids.second;
@@ -145,8 +154,13 @@ inline void get_existing_mappings(const std::string& output_path,
     std::string tmp_path = output_path + db + "/tmp/";
     if (std::filesystem::exists(mapping_file)) {
         BinaryToGEDResult(mapping_file, graphs, results);
+        // Build hash set for O(1) lookup of existing graph IDs
+        std::unordered_set<std::pair<INDEX, INDEX>, PairHash> existing_ids_set;
+        existing_ids_set.reserve(results.size());
+        existing_graph_ids.reserve(results.size());
         for (const auto& res : results) {
             existing_graph_ids.emplace_back(res.graph_ids);
+            existing_ids_set.insert(res.graph_ids);
         }
         // add possible existing graph ids from the tmp folder
         // Merge all mappings in tmp folder
@@ -155,9 +169,10 @@ inline void get_existing_mappings(const std::string& output_path,
             MergeBinaries(tmp_path, db + "_", graphs, tmp_results);
             // append new tmp_results
             for (const auto& res : tmp_results) {
-                if (ranges::find(existing_graph_ids, res.graph_ids) == existing_graph_ids.end()) {
+                if (existing_ids_set.find(res.graph_ids) == existing_ids_set.end()) {
                     results.emplace_back(res);
                     existing_graph_ids.emplace_back(res.graph_ids);
+                    existing_ids_set.insert(res.graph_ids);
                 }
             }
         }
@@ -247,6 +262,8 @@ inline int create_edit_mappings(const std::string& db,
     size_t max_number_of_pairs = 1000000;
     // store pairs inside set for faster lookup
     std::set<std::pair<INDEX, INDEX>> g_pairs;
+    // reserve capacity for graph_pairs vector
+    graph_pairs.reserve(max_number_of_pairs);
     // set up random device
     auto gen = std::mt19937(seed);
     std::uniform_int_distribution<INDEX> dist(0, graphs.graphData.size() - 1);
@@ -265,22 +282,29 @@ inline int create_edit_mappings(const std::string& db,
     }
     // if there are not enough existing pairs (computation has been interrupted) and num_pairs is set, only generate that many pairs
     std::vector<std::pair<INDEX, INDEX>> next_graph_pairs;
+    next_graph_pairs.reserve(graph_pairs.size());
+    // Build hash sets for O(1) lookups
+    std::unordered_set<std::pair<INDEX, INDEX>, PairHash> existing_pairs_set(existing_pairs.begin(), existing_pairs.end());
+    std::unordered_set<std::pair<INDEX, INDEX>, PairHash> graph_pairs_set(graph_pairs.begin(), graph_pairs.end());
     // iterate through the graph pairs and add those to next_graph_pairs that are not in existing_pairs
     // get the last index in graph_pairs that is bigger than an entry occuring in existing_pairs (to avoid unnecessary iterations)
     size_t max_index = 0;
     for (const auto& pair : existing_pairs) {
-        auto it = ranges::find(graph_pairs, pair);
-        if (it != graph_pairs.end()) {
-            size_t index = std::distance(graph_pairs.begin(), it);
-            if (index > max_index) {
-                max_index = index;
+        if (graph_pairs_set.find(pair) != graph_pairs_set.end()) {
+            // Find actual index - need linear search only once per existing pair found in graph_pairs
+            auto it = ranges::find(graph_pairs, pair);
+            if (it != graph_pairs.end()) {
+                size_t index = std::distance(graph_pairs.begin(), it);
+                if (index > max_index) {
+                    max_index = index;
+                }
             }
         }
     }
     // iterate over graph_pairs starting with max_index + 1
     for (size_t index = max_index + 1; index < graph_pairs.size(); ++index) {
         const auto& pair = graph_pairs[index];
-        if (ranges::find(existing_pairs, pair) == existing_pairs.end()) {
+        if (existing_pairs_set.find(pair) == existing_pairs_set.end()) {
             next_graph_pairs.emplace_back(pair);
         }
     }

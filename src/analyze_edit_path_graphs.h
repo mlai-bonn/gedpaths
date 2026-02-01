@@ -11,11 +11,18 @@
 #include <tuple>
 #include <iostream>
 #include <vector>
-#include <map>
+#include <unordered_map>
 #include <fstream>
 #include <filesystem>
 #include <sstream>
 #include <libGraph.h>
+
+// helper for pair hash (used with std::unordered_map)
+struct PairHash {
+    std::size_t operator()(const std::pair<INDEX, INDEX>& p) const noexcept {
+        return std::hash<long long>()((static_cast<long long>(p.first) << 32) ^ static_cast<long long>(p.second));
+    }
+};
 
 struct BucketOperations {
     unsigned long _node_insertions = 0;
@@ -114,15 +121,16 @@ void ValueStatistics::WriteCSV(const std::string &output_dir) const {
 // Statistic class for edit paths
 class EditPathStatistics {
 public:
-    EditPathStatistics()= default;
+    // Default constructor deleted - references must be initialized
+    EditPathStatistics() = delete;
     explicit EditPathStatistics(const GraphData<UDataGraph>& edit_paths, const std::vector<std::tuple<INDEX, INDEX, INDEX, EditOperation>>& edit_path_info);
     void PrintStatistics() const;
     // Write all contained ValueStatistics to CSV files inside the provided directory.
     void WriteCSVFiles(const std::string& output_dir) const;
     void WritePositionCSVFiles(const std::string& output_dir) const;
 private:
-    GraphData<UDataGraph> _edit_paths;
-    std::vector<std::tuple<INDEX, INDEX, INDEX, EditOperation>> _edit_path_info;
+    const GraphData<UDataGraph>& _edit_paths;  // const ref to avoid copy
+    const std::vector<std::tuple<INDEX, INDEX, INDEX, EditOperation>>& _edit_path_info;  // const ref to avoid copy
     ValueStatistics _num_nodes_stats;
     ValueStatistics _num_edges_stats;
     ValueStatistics _num_operations_stats;
@@ -160,8 +168,8 @@ EditPathStatistics::EditPathStatistics(const GraphData<UDataGraph> &edit_paths, 
     std::vector<BucketOperations> buckets ( bucket_size );
 
     // Map to count operations per (source_id, target_id)
-    std::map<std::pair<INDEX, INDEX>, std::vector<EditOperation>> operations_map;
-    std::map<std::pair<INDEX, INDEX>, std::pair<INDEX, INDEX>> graph_positions_map;
+    std::unordered_map<std::pair<INDEX, INDEX>, std::vector<EditOperation>, PairHash> operations_map;
+    std::unordered_map<std::pair<INDEX, INDEX>, std::pair<INDEX, INDEX>, PairHash> graph_positions_map;
     INDEX position = -1;
     for (const auto& entry : _edit_path_info) {
         INDEX source_id = std::get<0>(entry);
@@ -184,13 +192,35 @@ EditPathStatistics::EditPathStatistics(const GraphData<UDataGraph> &edit_paths, 
         operations_map[{source_id, target_id}].push_back(operation);
     }
 
+    // Reserve space for statistics vectors based on number of paths
+    const size_t num_paths = operations_map.size();
+    num_nodes.reserve(num_paths * 10);  // estimate: ~10 graphs per path on average
+    num_edges.reserve(num_paths * 10);
+    num_operations.reserve(num_paths);
+    path_lengths.reserve(num_paths);
+    node_insertions.reserve(num_paths);
+    node_deletions.reserve(num_paths);
+    node_relabels.reserve(num_paths);
+    edge_insertions.reserve(num_paths);
+    edge_deletions.reserve(num_paths);
+    edge_relabels.reserve(num_paths);
+    graphs_unconnected.reserve(num_paths);
+
+    // Reserve space for position vectors
+    _node_insertion_positions.reserve(num_paths);
+    _node_deletion_positions.reserve(num_paths);
+    _node_relabel_positions.reserve(num_paths);
+    _edge_insertion_positions.reserve(num_paths);
+    _edge_deletion_positions.reserve(num_paths);
+    _edge_relabel_positions.reserve(num_paths);
+
     // Now calculate statistics based on operations_map
     for (const auto& [key, operations] : operations_map) {
         INDEX source_id = key.first;
         INDEX target_id = key.second;
 
         // Find all graphs corresponding to the current path order in operations_map is the same as in edit_paths
-        std::vector<UDataGraph*> path_graphs = std::vector<UDataGraph*>(operations.size() + 1, nullptr);
+        std::vector<const UDataGraph*> path_graphs = std::vector<const UDataGraph*>(operations.size() + 1, nullptr);
         for (INDEX i = 0; i < path_graphs.size(); ++i) {
             INDEX graph_index = graph_positions_map[{source_id, target_id}].first;
             path_graphs[i] = &_edit_paths.graphData[graph_index + i];
@@ -204,7 +234,8 @@ EditPathStatistics::EditPathStatistics(const GraphData<UDataGraph> &edit_paths, 
                 num_edges.push_back(static_cast<double>(g->edges()));
                 // print whether the graph is connected
                 std::string graph_name = g->GetName();
-                bool connected = g->GetConnectivity();
+                // const_cast needed because libGraph's GetConnectivity() is not const-qualified
+                bool connected = const_cast<UDataGraph*>(g)->GetConnectivity();
                 if (!connected) {
                     graphs_unconnected.back() += 1.0;
                 }
@@ -225,6 +256,14 @@ EditPathStatistics::EditPathStatistics(const GraphData<UDataGraph> &edit_paths, 
             std::vector<int> edge_insert_pos;
             std::vector<int> edge_delete_pos;
             std::vector<int> edge_relabel_pos;
+            // Reserve space for per-path position vectors (worst case: all operations of one type)
+            const size_t ops_size = operations.size();
+            node_insert_pos.reserve(ops_size);
+            node_delete_pos.reserve(ops_size);
+            node_relabel_pos.reserve(ops_size);
+            edge_insert_pos.reserve(ops_size);
+            edge_delete_pos.reserve(ops_size);
+            edge_relabel_pos.reserve(ops_size);
             for (const auto& op : operations) {
                 // make divisor explicit as double to avoid narrowing warnings
                 auto ops_size_d = static_cast<double>(operations.size());

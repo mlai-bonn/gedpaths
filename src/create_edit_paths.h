@@ -6,6 +6,7 @@
 #define GEDPATHS_CREATE_EDIT_PATHS_H
 
 #include <libGraph.h>
+#include <unordered_set>
 
 inline int create_edit_paths( const std::string& db,
                               const std::string& processed_graph_path,
@@ -59,10 +60,12 @@ inline int create_edit_paths( const std::string& db,
     }
 
 
-    // Filter out invalid results
+    // Filter out invalid results - use hash set for O(1) lookup instead of linear search
+    std::unordered_set<int> invalid_set(invalids.begin(), invalids.end());
     std::vector<GEDEvaluation<UDataGraph>> valid_results;
+    valid_results.reserve(results.size() - invalid_set.size());
     for (size_t i = 0; i < results.size(); ++i) {
-        if (std::find(invalids.begin(), invalids.end(), static_cast<int>(i)) == invalids.end()) {
+        if (invalid_set.find(static_cast<int>(i)) == invalid_set.end()) {
             valid_results.push_back(results[i]);
         }
     }

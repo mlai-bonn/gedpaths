@@ -10,6 +10,32 @@ import torch
 from torch_geometric.data import Data, InMemoryDataset
 
 
+# -------- dtype size lookup table (avoids temporary tensor creation) --------
+
+_DTYPE_SIZES = {
+    torch.float16: 2,
+    torch.float32: 4,
+    torch.float64: 8,
+    torch.bfloat16: 2,
+    torch.int8: 1,
+    torch.int16: 2,
+    torch.int32: 4,
+    torch.int64: 8,
+    torch.uint8: 1,
+    torch.bool: 1,
+    torch.complex64: 8,
+    torch.complex128: 16,
+}
+
+
+def _get_dtype_size(dtype: torch.dtype) -> int:
+    """Get the byte size of a torch dtype using a constant lookup table."""
+    if dtype in _DTYPE_SIZES:
+        return _DTYPE_SIZES[dtype]
+    # Fallback for unknown dtypes (creates temporary tensor)
+    return torch.tensor([], dtype=dtype).element_size()
+
+
 # -------- stdlib helpers --------
 
 def _read_exact(f: io.BufferedReader, n: int) -> bytes:
@@ -46,7 +72,7 @@ def _read_np_block(f, dtype: np.dtype, count: int) -> np.ndarray:
 def _read_torch_block(f, dtype: torch.dtype, count: int) -> torch.Tensor:
     if count == 0:
         return torch.empty((0,), dtype=dtype)
-    buf = _read_exact(f, count * torch.tensor([], dtype=dtype).element_size())
+    buf = _read_exact(f, count * _get_dtype_size(dtype))
     arr = torch.frombuffer(buf, dtype=dtype)
     if arr.numel() != count:
         raise EOFError("Short read.")
@@ -178,25 +204,48 @@ def bgf_to_pyg_data_list(
                     pnl = None
             raw_data['primary_node_labels'].append(pnl)
 
-            # EDGES
+            # EDGES - bulk reading for performance (no per-edge loop)
             m = h.edge_number
-            if m > 0:
-                ei = np.empty((2, m), dtype=np.int64)
-            else:
+            if m == 0:
                 ei = np.empty((2, 0), dtype=np.int64)
-            ea = None
-            for e_i in range(m):
-                u = _read_size_t(f, endian, size_t_bytes)
-                v = _read_size_t(f, endian, size_t_bytes)
-                if u >= h.node_number or v >= h.node_number:
-                    raise ValueError("Invalid edge index; check endianness/size_t.")
-                ei[0, e_i] = int(u)
-                ei[1, e_i] = int(v)
+                ea = None
+            else:
+                # Each edge: u (size_t), v (size_t), then edge_features floats
+                # Build numpy structured dtype for bulk parsing
+                byte_order = "<" if endian == "<" else ">"
+                idx_dtype_str = f"{byte_order}u{size_t_bytes}"  # e.g., '<u8' for little-endian uint64
+
                 if h.edge_features > 0:
-                    ef = _read_torch_block(f, torch.float64, h.edge_features)
-                    if ea is None:
-                        ea = np.empty((m, h.edge_features), dtype=out_dtype)
-                    ea[e_i, :] = ef.numpy()
+                    # Structured dtype: (u, v, features[])
+                    edge_dtype = np.dtype([
+                        ('u', idx_dtype_str),
+                        ('v', idx_dtype_str),
+                        ('features', f'{byte_order}f8', (h.edge_features,))
+                    ])
+                else:
+                    # Structured dtype: (u, v) only
+                    edge_dtype = np.dtype([
+                        ('u', idx_dtype_str),
+                        ('v', idx_dtype_str)
+                    ])
+
+                # Bulk read all edge data at once
+                edge_block = _read_np_block(f, edge_dtype, m)
+
+                # Extract edge indices using numpy vectorized operations
+                ei = np.empty((2, m), dtype=np.int64)
+                ei[0, :] = edge_block['u']
+                ei[1, :] = edge_block['v']
+
+                # Validate edge indices using vectorized comparison
+                if np.any(ei[0, :] >= h.node_number) or np.any(ei[1, :] >= h.node_number):
+                    raise ValueError("Invalid edge index; check endianness/size_t.")
+
+                # Extract edge features if present
+                if h.edge_features > 0:
+                    ea = edge_block['features'].astype(out_dtype)
+                else:
+                    ea = None
 
             # if undirected: duplicate edges and attributes
             if undirected and ei.shape[1] > 0:
