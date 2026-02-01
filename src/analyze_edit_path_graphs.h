@@ -114,15 +114,16 @@ void ValueStatistics::WriteCSV(const std::string &output_dir) const {
 // Statistic class for edit paths
 class EditPathStatistics {
 public:
-    EditPathStatistics()= default;
+    // Default constructor deleted - references must be initialized
+    EditPathStatistics() = delete;
     explicit EditPathStatistics(const GraphData<UDataGraph>& edit_paths, const std::vector<std::tuple<INDEX, INDEX, INDEX, EditOperation>>& edit_path_info);
     void PrintStatistics() const;
     // Write all contained ValueStatistics to CSV files inside the provided directory.
     void WriteCSVFiles(const std::string& output_dir) const;
     void WritePositionCSVFiles(const std::string& output_dir) const;
 private:
-    GraphData<UDataGraph> _edit_paths;
-    std::vector<std::tuple<INDEX, INDEX, INDEX, EditOperation>> _edit_path_info;
+    const GraphData<UDataGraph>& _edit_paths;  // const ref to avoid copy
+    const std::vector<std::tuple<INDEX, INDEX, INDEX, EditOperation>>& _edit_path_info;  // const ref to avoid copy
     ValueStatistics _num_nodes_stats;
     ValueStatistics _num_edges_stats;
     ValueStatistics _num_operations_stats;
