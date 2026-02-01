@@ -111,6 +111,7 @@ inline void fixInvalidMappings(std::vector<GEDEvaluation<UDataGraph>>& results,
     // recalulate the mappings for the invalid results
     std::cout << "Recalculating mappings for invalid results...\n";
     std::vector<std::pair<INDEX, GEDEvaluation<UDataGraph>>> fixed_results;
+    fixed_results.reserve(invalid_mappings.size());
     for (const auto &id : invalid_mappings) {
         auto source_id = results[id].graph_ids.first;
         auto target_id = results[id].graph_ids.second;
@@ -156,6 +157,7 @@ inline void get_existing_mappings(const std::string& output_path,
         // Build hash set for O(1) lookup of existing graph IDs
         std::unordered_set<std::pair<INDEX, INDEX>, PairHash> existing_ids_set;
         existing_ids_set.reserve(results.size());
+        existing_graph_ids.reserve(results.size());
         for (const auto& res : results) {
             existing_graph_ids.emplace_back(res.graph_ids);
             existing_ids_set.insert(res.graph_ids);
@@ -260,6 +262,8 @@ inline int create_edit_mappings(const std::string& db,
     size_t max_number_of_pairs = 1000000;
     // store pairs inside set for faster lookup
     std::set<std::pair<INDEX, INDEX>> g_pairs;
+    // reserve capacity for graph_pairs vector
+    graph_pairs.reserve(max_number_of_pairs);
     // set up random device
     auto gen = std::mt19937(seed);
     std::uniform_int_distribution<INDEX> dist(0, graphs.graphData.size() - 1);
@@ -278,6 +282,7 @@ inline int create_edit_mappings(const std::string& db,
     }
     // if there are not enough existing pairs (computation has been interrupted) and num_pairs is set, only generate that many pairs
     std::vector<std::pair<INDEX, INDEX>> next_graph_pairs;
+    next_graph_pairs.reserve(graph_pairs.size());
     // Build hash sets for O(1) lookups
     std::unordered_set<std::pair<INDEX, INDEX>, PairHash> existing_pairs_set(existing_pairs.begin(), existing_pairs.end());
     std::unordered_set<std::pair<INDEX, INDEX>, PairHash> graph_pairs_set(graph_pairs.begin(), graph_pairs.end());
