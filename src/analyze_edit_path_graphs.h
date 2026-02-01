@@ -192,6 +192,28 @@ EditPathStatistics::EditPathStatistics(const GraphData<UDataGraph> &edit_paths, 
         operations_map[{source_id, target_id}].push_back(operation);
     }
 
+    // Reserve space for statistics vectors based on number of paths
+    const size_t num_paths = operations_map.size();
+    num_nodes.reserve(num_paths * 10);  // estimate: ~10 graphs per path on average
+    num_edges.reserve(num_paths * 10);
+    num_operations.reserve(num_paths);
+    path_lengths.reserve(num_paths);
+    node_insertions.reserve(num_paths);
+    node_deletions.reserve(num_paths);
+    node_relabels.reserve(num_paths);
+    edge_insertions.reserve(num_paths);
+    edge_deletions.reserve(num_paths);
+    edge_relabels.reserve(num_paths);
+    graphs_unconnected.reserve(num_paths);
+
+    // Reserve space for position vectors
+    _node_insertion_positions.reserve(num_paths);
+    _node_deletion_positions.reserve(num_paths);
+    _node_relabel_positions.reserve(num_paths);
+    _edge_insertion_positions.reserve(num_paths);
+    _edge_deletion_positions.reserve(num_paths);
+    _edge_relabel_positions.reserve(num_paths);
+
     // Now calculate statistics based on operations_map
     for (const auto& [key, operations] : operations_map) {
         INDEX source_id = key.first;
@@ -233,6 +255,14 @@ EditPathStatistics::EditPathStatistics(const GraphData<UDataGraph> &edit_paths, 
             std::vector<int> edge_insert_pos;
             std::vector<int> edge_delete_pos;
             std::vector<int> edge_relabel_pos;
+            // Reserve space for per-path position vectors (worst case: all operations of one type)
+            const size_t ops_size = operations.size();
+            node_insert_pos.reserve(ops_size);
+            node_delete_pos.reserve(ops_size);
+            node_relabel_pos.reserve(ops_size);
+            edge_insert_pos.reserve(ops_size);
+            edge_delete_pos.reserve(ops_size);
+            edge_relabel_pos.reserve(ops_size);
             for (const auto& op : operations) {
                 // make divisor explicit as double to avoid narrowing warnings
                 auto ops_size_d = static_cast<double>(operations.size());
