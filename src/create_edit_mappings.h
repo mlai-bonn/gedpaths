@@ -12,6 +12,7 @@
 #include <utility>
 #include <vector>
 #include <unordered_set>
+#include <stdexcept>
 #include <libGraph.h>
 #include <src/env/ged_env.hpp>
 
@@ -41,8 +42,7 @@ GEDEvaluation<UDataGraph> create_edit_mappings_single(INDEX source_id, INDEX tar
 
 inline GEDEvaluation<UDataGraph> create_edit_mappings_single(INDEX source_id, INDEX target_id, GraphData<UDataGraph>& graphs, ged::Options::EditCosts edit_cost, ged::Options::GEDMethod ged_method, const std::string& method_options, bool print) {
     if (source_id >= graphs.graphData.size() || target_id >= graphs.graphData.size()) {
-        std::cerr << "Single source/target IDs out of range: " << source_id << ", " << target_id << std::endl;
-        exit(1);
+        throw std::out_of_range("Single source/target IDs out of range: " + std::to_string(source_id) + ", " + std::to_string(target_id));
     }
     std::pair<INDEX, INDEX> pair = std::minmax(source_id, target_id);
     std::vector<std::pair<INDEX, INDEX>> single_pair{pair};
