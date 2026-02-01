@@ -11,11 +11,18 @@
 #include <tuple>
 #include <iostream>
 #include <vector>
-#include <map>
+#include <unordered_map>
 #include <fstream>
 #include <filesystem>
 #include <sstream>
 #include <libGraph.h>
+
+// helper for pair hash (used with std::unordered_map)
+struct PairHash {
+    std::size_t operator()(const std::pair<INDEX, INDEX>& p) const noexcept {
+        return std::hash<long long>()((static_cast<long long>(p.first) << 32) ^ static_cast<long long>(p.second));
+    }
+};
 
 struct BucketOperations {
     unsigned long _node_insertions = 0;
@@ -161,8 +168,8 @@ EditPathStatistics::EditPathStatistics(const GraphData<UDataGraph> &edit_paths, 
     std::vector<BucketOperations> buckets ( bucket_size );
 
     // Map to count operations per (source_id, target_id)
-    std::map<std::pair<INDEX, INDEX>, std::vector<EditOperation>> operations_map;
-    std::map<std::pair<INDEX, INDEX>, std::pair<INDEX, INDEX>> graph_positions_map;
+    std::unordered_map<std::pair<INDEX, INDEX>, std::vector<EditOperation>, PairHash> operations_map;
+    std::unordered_map<std::pair<INDEX, INDEX>, std::pair<INDEX, INDEX>, PairHash> graph_positions_map;
     INDEX position = -1;
     for (const auto& entry : _edit_path_info) {
         INDEX source_id = std::get<0>(entry);
