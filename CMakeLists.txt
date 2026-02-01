@@ -5,7 +5,15 @@ set(CMAKE_CXX_STANDARD 20)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O2 -DNDEBUG")
+# Optimization flags
+option(ENABLE_NATIVE_ARCH "Enable -march=native for optimized local builds (not portable)" OFF)
+
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
+
+if(ENABLE_NATIVE_ARCH)
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
+    message(STATUS "Native architecture optimization enabled (-march=native)")
+endif()
 
 find_package(OpenMP)
 if (OPENMP_FOUND)
