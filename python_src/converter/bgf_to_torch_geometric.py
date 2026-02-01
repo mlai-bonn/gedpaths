@@ -10,6 +10,32 @@ import torch
 from torch_geometric.data import Data, InMemoryDataset
 
 
+# -------- dtype size lookup table (avoids temporary tensor creation) --------
+
+_DTYPE_SIZES = {
+    torch.float16: 2,
+    torch.float32: 4,
+    torch.float64: 8,
+    torch.bfloat16: 2,
+    torch.int8: 1,
+    torch.int16: 2,
+    torch.int32: 4,
+    torch.int64: 8,
+    torch.uint8: 1,
+    torch.bool: 1,
+    torch.complex64: 8,
+    torch.complex128: 16,
+}
+
+
+def _get_dtype_size(dtype: torch.dtype) -> int:
+    """Get the byte size of a torch dtype using a constant lookup table."""
+    if dtype in _DTYPE_SIZES:
+        return _DTYPE_SIZES[dtype]
+    # Fallback for unknown dtypes (creates temporary tensor)
+    return torch.tensor([], dtype=dtype).element_size()
+
+
 # -------- stdlib helpers --------
 
 def _read_exact(f: io.BufferedReader, n: int) -> bytes:
@@ -46,7 +72,7 @@ def _read_np_block(f, dtype: np.dtype, count: int) -> np.ndarray:
 def _read_torch_block(f, dtype: torch.dtype, count: int) -> torch.Tensor:
     if count == 0:
         return torch.empty((0,), dtype=dtype)
-    buf = _read_exact(f, count * torch.tensor([], dtype=dtype).element_size())
+    buf = _read_exact(f, count * _get_dtype_size(dtype))
     arr = torch.frombuffer(buf, dtype=dtype)
     if arr.numel() != count:
         raise EOFError("Short read.")
