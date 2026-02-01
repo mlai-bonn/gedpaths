@@ -204,25 +204,48 @@ def bgf_to_pyg_data_list(
                     pnl = None
             raw_data['primary_node_labels'].append(pnl)
 
-            # EDGES
+            # EDGES - bulk reading for performance (no per-edge loop)
             m = h.edge_number
-            if m > 0:
-                ei = np.empty((2, m), dtype=np.int64)
-            else:
+            if m == 0:
                 ei = np.empty((2, 0), dtype=np.int64)
-            ea = None
-            for e_i in range(m):
-                u = _read_size_t(f, endian, size_t_bytes)
-                v = _read_size_t(f, endian, size_t_bytes)
-                if u >= h.node_number or v >= h.node_number:
-                    raise ValueError("Invalid edge index; check endianness/size_t.")
-                ei[0, e_i] = int(u)
-                ei[1, e_i] = int(v)
+                ea = None
+            else:
+                # Each edge: u (size_t), v (size_t), then edge_features floats
+                # Build numpy structured dtype for bulk parsing
+                byte_order = "<" if endian == "<" else ">"
+                idx_dtype_str = f"{byte_order}u{size_t_bytes}"  # e.g., '<u8' for little-endian uint64
+
                 if h.edge_features > 0:
-                    ef = _read_torch_block(f, torch.float64, h.edge_features)
-                    if ea is None:
-                        ea = np.empty((m, h.edge_features), dtype=out_dtype)
-                    ea[e_i, :] = ef.numpy()
+                    # Structured dtype: (u, v, features[])
+                    edge_dtype = np.dtype([
+                        ('u', idx_dtype_str),
+                        ('v', idx_dtype_str),
+                        ('features', f'{byte_order}f8', (h.edge_features,))
+                    ])
+                else:
+                    # Structured dtype: (u, v) only
+                    edge_dtype = np.dtype([
+                        ('u', idx_dtype_str),
+                        ('v', idx_dtype_str)
+                    ])
+
+                # Bulk read all edge data at once
+                edge_block = _read_np_block(f, edge_dtype, m)
+
+                # Extract edge indices using numpy vectorized operations
+                ei = np.empty((2, m), dtype=np.int64)
+                ei[0, :] = edge_block['u']
+                ei[1, :] = edge_block['v']
+
+                # Validate edge indices using vectorized comparison
+                if np.any(ei[0, :] >= h.node_number) or np.any(ei[1, :] >= h.node_number):
+                    raise ValueError("Invalid edge index; check endianness/size_t.")
+
+                # Extract edge features if present
+                if h.edge_features > 0:
+                    ea = edge_block['features'].astype(out_dtype)
+                else:
+                    ea = None
 
             # if undirected: duplicate edges and attributes
             if undirected and ei.shape[1] > 0:
