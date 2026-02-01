@@ -1,0 +1,10 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/florian/Documents/CodeProjectsGit/GNNGED/.auto-claude/worktrees/tasks/002-please-implement-the-optimizations-that-were-found/cmake-build-release/CMakeFiles/_CMakeLTOTest-CXX/src/main.cpp
+

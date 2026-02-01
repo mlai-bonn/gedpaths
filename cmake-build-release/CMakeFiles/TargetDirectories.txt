@@ -1,0 +1,9 @@
+/home/florian/Documents/CodeProjectsGit/GNNGED/.auto-claude/worktrees/tasks/002-please-implement-the-optimizations-that-were-found/cmake-build-release/CMakeFiles/CreateMappings.dir
+/home/florian/Documents/CodeProjectsGit/GNNGED/.auto-claude/worktrees/tasks/002-please-implement-the-optimizations-that-were-found/cmake-build-release/CMakeFiles/CreatePaths.dir
+/home/florian/Documents/CodeProjectsGit/GNNGED/.auto-claude/worktrees/tasks/002-please-implement-the-optimizations-that-were-found/cmake-build-release/CMakeFiles/AnalyzePaths.dir
+/home/florian/Documents/CodeProjectsGit/GNNGED/.auto-claude/worktrees/tasks/002-please-implement-the-optimizations-that-were-found/cmake-build-release/CMakeFiles/AnalyzeMappings.dir
+/home/florian/Documents/CodeProjectsGit/GNNGED/.auto-claude/worktrees/tasks/002-please-implement-the-optimizations-that-were-found/cmake-build-release/CMakeFiles/Test.dir
+/home/florian/Documents/CodeProjectsGit/GNNGED/.auto-claude/worktrees/tasks/002-please-implement-the-optimizations-that-were-found/cmake-build-release/CMakeFiles/TestLINUX.dir
+/home/florian/Documents/CodeProjectsGit/GNNGED/.auto-claude/worktrees/tasks/002-please-implement-the-optimizations-that-were-found/cmake-build-release/CMakeFiles/ConvertPrecomputed.dir
+/home/florian/Documents/CodeProjectsGit/GNNGED/.auto-claude/worktrees/tasks/002-please-implement-the-optimizations-that-were-found/cmake-build-release/CMakeFiles/edit_cache.dir
+/home/florian/Documents/CodeProjectsGit/GNNGED/.auto-claude/worktrees/tasks/002-please-implement-the-optimizations-that-were-found/cmake-build-release/CMakeFiles/rebuild_cache.dir
