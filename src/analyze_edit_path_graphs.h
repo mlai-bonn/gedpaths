@@ -220,7 +220,7 @@ EditPathStatistics::EditPathStatistics(const GraphData<UDataGraph> &edit_paths, 
         INDEX target_id = key.second;
 
         // Find all graphs corresponding to the current path order in operations_map is the same as in edit_paths
-        std::vector<UDataGraph*> path_graphs = std::vector<UDataGraph*>(operations.size() + 1, nullptr);
+        std::vector<const UDataGraph*> path_graphs = std::vector<const UDataGraph*>(operations.size() + 1, nullptr);
         for (INDEX i = 0; i < path_graphs.size(); ++i) {
             INDEX graph_index = graph_positions_map[{source_id, target_id}].first;
             path_graphs[i] = &_edit_paths.graphData[graph_index + i];
@@ -234,7 +234,8 @@ EditPathStatistics::EditPathStatistics(const GraphData<UDataGraph> &edit_paths, 
                 num_edges.push_back(static_cast<double>(g->edges()));
                 // print whether the graph is connected
                 std::string graph_name = g->GetName();
-                bool connected = g->GetConnectivity();
+                // const_cast needed because libGraph's GetConnectivity() is not const-qualified
+                bool connected = const_cast<UDataGraph*>(g)->GetConnectivity();
                 if (!connected) {
                     graphs_unconnected.back() += 1.0;
                 }
