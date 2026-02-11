@@ -5,28 +5,11 @@ set(CMAKE_CXX_STANDARD 20)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake")
 
-# Optimization flags
-option(ENABLE_NATIVE_ARCH "Enable -march=native for optimized local builds (not portable)" OFF)
-option(USE_LTO "Enable Link-Time Optimization (LTO) for Release builds" OFF)
+# Compiler optimizations: -O3 for maximum optimization, -march=native for CPU-specific optimizations
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -march=native -DNDEBUG")
 
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
-
-if(ENABLE_NATIVE_ARCH)
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
-    message(STATUS "Native architecture optimization enabled (-march=native)")
-endif()
-
-# Link-Time Optimization (LTO) support
-if(USE_LTO)
-    include(CheckIPOSupported)
-    check_ipo_supported(RESULT LTO_SUPPORTED OUTPUT LTO_OUTPUT)
-    if(LTO_SUPPORTED)
-        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
-        message(STATUS "Link-Time Optimization (LTO) enabled")
-    else()
-        message(WARNING "LTO requested but not supported: ${LTO_OUTPUT}")
-    endif()
-endif()
+# Enable Link Time Optimization (LTO) for additional performance gains
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 find_package(OpenMP)
 if (OPENMP_FOUND)
