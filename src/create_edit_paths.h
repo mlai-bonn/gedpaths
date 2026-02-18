@@ -40,6 +40,14 @@ inline int create_edit_paths( const std::string& db,
         std::filesystem::create_directories(edit_path_output_db);
     }
 
+    // Check whether the paths have been computed
+    if (std::filesystem::exists(edit_path_output_db + db + "_edit_paths.bgf")) {
+        std::cout << "Edit paths for " << db << " already exist at " << edit_path_output_db + db + "_edit_paths.bgf" << std::endl;
+        // Mention that one have to check if the paths are all that one wanted to compute
+        std::cout << "Check if the paths are those you want to use!" << std::endl;
+        return 0;
+    }
+
     GraphData<UDataGraph> graphs;
     LoadSaveGraphDatasets::LoadPreprocessedGraphData(db, processed_graph_path, graphs);
 
@@ -62,18 +70,51 @@ inline int create_edit_paths( const std::string& db,
 
     // Filter out invalid results - use hash set for O(1) lookup instead of linear search
     std::unordered_set<int> invalid_set(invalids.begin(), invalids.end());
+    // Falls source_id und target_id gesetzt sind, nur das entsprechende Mapping verwenden
+    if (source_id >= 0 && target_id >= 0) {
+        std::cout << "Creating edit path for specific graph IDs: " << source_id << " and " << target_id << ".\n";
+        int found_index = -1;
+        for (size_t i = 0; i < results.size(); ++i) {
+            const auto& eval = results[i];
+            if ((eval.graph_ids.first == source_id && eval.graph_ids.second == target_id) ||
+                (eval.graph_ids.first == target_id && eval.graph_ids.second == source_id)) {
+                found_index = static_cast<int>(i);
+                break;
+            }
+        }
+        if (found_index < 0) {
+            std::cerr << "Kein Mapping für die angegebenen Graphen-IDs gefunden.\n";
+            return 1;
+        }
+        if (invalid_set.find(found_index) != invalid_set.end()) {
+            std::cerr << "Gefundenes Mapping ist ungültig und wird nicht verarbeitet.\n";
+            return 1;
+        }
+        std::vector<GEDEvaluation<UDataGraph>> single_result;
+        single_result.reserve(1);
+        single_result.push_back(std::move(results[found_index]));
+        results.clear();
+        results.shrink_to_fit();
+        std::cout << "Erzeuge Edit-Path nur für Mapping zwischen Graph " << source_id << " und " << target_id << ".\n";
+        CreateAllEditPaths(single_result, graphs,  edit_path_output_db, seed, connected_only, edit_path_strategies);
+        return 0;
+    }
+
+    const size_t total_results = results.size();
     std::vector<GEDEvaluation<UDataGraph>> valid_results;
     valid_results.reserve(results.size() - invalid_set.size());
     for (size_t i = 0; i < results.size(); ++i) {
         if (invalid_set.find(static_cast<int>(i)) == invalid_set.end()) {
-            valid_results.push_back(results[i]);
+            valid_results.push_back(std::move(results[i]));
         }
     }
+    results.clear();
+    results.shrink_to_fit();
     if (valid_results.empty()) {
         std::cerr << "No valid results to process. Exiting.\n";
         return 1;
     }
-    std::cout << "Proceeding with " << valid_results.size() << " valid mappings out of " << results.size() << " total mappings.\n";
+    std::cout << "Proceeding with " << valid_results.size() << " valid mappings out of " << total_results << " total mappings.\n";
 
     if (num_mappings > 0 && num_mappings < static_cast<int>(valid_results.size())) {
         // shuffle valid_results and take first num_mappings
@@ -88,24 +129,8 @@ inline int create_edit_paths( const std::string& db,
         });
 
     }
-    // Falls source_id und target_id gesetzt sind, nur das entsprechende Mapping verwenden
-    if (source_id >= 0 && target_id >= 0) {
-        std::cout << "Creating edit path for specific graph IDs: " << source_id << " and " << target_id << ".\n";
-        auto it = std::find_if(results.begin(), results.end(), [&](const GEDEvaluation<UDataGraph>& eval) {
-            return (eval.graph_ids.first == source_id && eval.graph_ids.second == target_id) ||
-                   (eval.graph_ids.first == target_id && eval.graph_ids.second == source_id);
-        });
-        if (it == results.end()) {
-            std::cerr << "Kein Mapping für die angegebenen Graphen-IDs gefunden.\n";
-            return 1;
-        }
-        std::vector<GEDEvaluation<UDataGraph>> single_result{*it};
-        std::cout << "Erzeuge Edit-Path nur für Mapping zwischen Graph " << source_id << " und " << target_id << ".\n";
-        CreateAllEditPaths(single_result, graphs,  edit_path_output_db, seed, connected_only, edit_path_strategies);
-        return 0;
-    }
     // print info about number of valid results considered
-    std::cout << "Creating edit paths for " << valid_results.size() << " valid mappings out of " << results.size() << " total mappings.\n";
+    std::cout << "Creating edit paths for " << valid_results.size() << " valid mappings out of " << total_results << " total mappings.\n";
     CreateAllEditPaths(valid_results, graphs,  edit_path_output_db, seed, connected_only, edit_path_strategies);
 
     return 0;
