@@ -18,6 +18,17 @@ if (OPENMP_FOUND)
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
 
+# print the gurobi home environment variable and the gurobi dir variable
+message(STATUS "GUROBI_HOME environment variable: $ENV{GUROBI_HOME}")
+message(STATUS "GUROBI_DIR variable: ${GUROBI_DIR}")
+# Set default GUROBI path if GUROBI_HOME is not set (for IDEs like CLion)
+if(NOT "$ENV{GUROBI_HOME}" STREQUAL "")
+    set(GUROBI_DIR "$ENV{GUROBI_HOME}" CACHE PATH "Path to GUROBI installation" FORCE)
+else()
+    set(GUROBI_DIR "/home/mlai21/share/opt/gurobi1203/linux64" CACHE PATH "Path to GUROBI installation" FORCE)
+endif()
+
+
 find_package(GUROBI REQUIRED)
 message(STATUS "Found GUROBI: ${GUROBI_LIBRARY}, ${GUROBI_CXX_LIBRARY}, ${GUROBI_INCLUDE_DIRS}")
 if (NOT GUROBI_FOUND)
@@ -35,7 +46,7 @@ set(LIBGRAPH_ROOT ../libGraph)
 set(GEDLIB_ROOT ${LIBGRAPH_ROOT}/external/gedlib)
 
 
-include_directories(${LIBGRAPH_ROOT}/include ${GEDLIB_ROOT} ${GEDLIB_ROOT}/ext/boost ${GEDLIB_ROOT}/ext/eigen/Eigen ${GEDLIB_ROOT}/ext/nomad.3.8.1/src ${GEDLIB_ROOT}/ext/nomad.3.8.1/ext/sgtelib/src ${GEDLIB_ROOT}/ext/lsape.5/cpp/include ${GEDLIB_ROOT}/ext/libsvm.3.22 ${GEDLIB_ROOT}/ext/fann.2.2.0/include ${GUROBI_HOME}/include)
+include_directories(${LIBGRAPH_ROOT}/include ${GEDLIB_ROOT} ${GEDLIB_ROOT}/ext/boost ${GEDLIB_ROOT}/ext/eigen/Eigen ${GEDLIB_ROOT}/ext/nomad.3.8.1/src ${GEDLIB_ROOT}/ext/nomad.3.8.1/ext/sgtelib/src ${GEDLIB_ROOT}/ext/lsape.5/cpp/include ${GEDLIB_ROOT}/ext/libsvm.3.22 ${GEDLIB_ROOT}/ext/fann.2.2.0/include ${GUROBI_DIR}/include)
 link_directories(${LIBGRAPH_ROOT}/include ${GEDLIB_ROOT}/ext/nomad.3.8.1/lib ${GEDLIB_ROOT}/ext/libsvm.3.22 ${GEDLIB_ROOT}/ext/fann.2.2.0/lib)
 
 # adding the Google_Tests_run target

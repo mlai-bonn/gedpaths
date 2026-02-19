@@ -11,69 +11,67 @@
 #include <tuple>
 #include <iostream>
 #include <vector>
-#include <unordered_map>
+#include <algorithm>
 #include <fstream>
 #include <filesystem>
 #include <sstream>
+#include <iomanip>
+#include <optional>
 #include <libGraph.h>
 
-// helper for pair hash (used with std::unordered_map)
-struct PairHash {
-    std::size_t operator()(const std::pair<INDEX, INDEX>& p) const noexcept {
-        return std::hash<long long>()((static_cast<long long>(p.first) << 32) ^ static_cast<long long>(p.second));
+inline std::string SanitizeMetricName(const std::string& name) {
+    std::string filename = name;
+    for (auto& c : filename) {
+        if (c == ' ' || c == '/') c = '_';
     }
-};
+    return filename;
+}
 
-struct BucketOperations {
-    unsigned long _node_insertions = 0;
-    unsigned long _node_deletions = 0;
-    unsigned long _node_relabels = 0;
-    unsigned long _edge_insertions = 0;
-    unsigned long _edge_deletions = 0;
-    unsigned long _edge_relabels = 0;
-};
-
-// Statistic class for num, average, stddev, min, max of a list of values with name
 class ValueStatistics {
 public:
     ValueStatistics()= default;
-    explicit ValueStatistics(const std::string& name, const std::vector<double>& values);
+    explicit ValueStatistics(std::string name): _name(std::move(name)) {}
+    void AddValue(double value);
     void PrintStatistics() const;
-    // Write the stored values to a CSV file in the provided directory.
-    // The filename is derived from the statistic name (spaces replaced with underscores).
-    void WriteCSV(const std::string& output_dir) const;
+    [[nodiscard]] unsigned long GetCount() const { return _num_values; }
+    [[nodiscard]] double GetAverage() const { return _average; }
 private:
     std::string _name;
-    std::vector<double> _values;
     unsigned long _num_values = 0;
-    double _sum_values = 0.0;
     double _average = 0.0;
+    double _m2 = 0.0;
     double _stddev = 0.0;
-    double _min = std::numeric_limits<double>::max();
-    double _max = std::numeric_limits<double>::min();
+    double _min = 0.0;
+    double _max = 0.0;
 };
 
-ValueStatistics::ValueStatistics(const std::string &name, const std::vector<double> &values) {
-    _name = name;
-    _values = values;
-    _num_values = values.size();
-    _sum_values = std::accumulate(values.begin(), values.end(), 0.0);
-    if (_num_values > 0) {
-        _average = _sum_values / static_cast<double>(_num_values);
-        double sum_squared_diff = 0.0;
-        for (const auto& value : values) {
-            sum_squared_diff += (value - _average) * (value - _average);
-            if (value < _min) {
-                _min = value;
-            }
-            if (value > _max) {
-                _max = value;
-            }
-        }
-        _stddev = std::sqrt(sum_squared_diff / static_cast<double>(_num_values));
-    } else {
-        _min = 0.0;
-        _max = 0.0;
+void ValueStatistics::AddValue(const double value) {
+    if (_num_values == 0) {
+        _min = value;
+        _max = value;
+        _average = value;
+        _m2 = 0.0;
+        _num_values = 1;
+        _stddev = 0.0;
+        return;
+    }
+
+    _min = std::min(_min, value);
+    _max = std::max(_max, value);
+    _num_values += 1;
+    const double delta = value - _average;
+    _average += delta / static_cast<double>(_num_values);
+    const double delta2 = value - _average;
+    _m2 += delta * delta2;
+    _stddev = std::sqrt(_m2 / static_cast<double>(_num_values));
+}
+
+inline void EnsureDirectory(const std::string& output_dir) {
+    namespace fs = std::filesystem;
+    try {
+        fs::create_directories(output_dir);
+    } catch (const std::exception& e) {
+        std::cerr << "Warning: Failed to create directory '" << output_dir << "': " << e.what() << std::endl;
     }
 }
 
@@ -86,51 +84,95 @@ void ValueStatistics::PrintStatistics() const {
     std::cout << "  Maximum: " << _max << "\n";
 }
 
-void ValueStatistics::WriteCSV(const std::string &output_dir) const {
-    namespace fs = std::filesystem;
-    try {
-        fs::create_directories(output_dir);
-    } catch (...) {
-        // If directory creation fails, still attempt to write file (may fail later).
-    }
-    // sanitize name to filename
-    std::string filename = _name;
-    for (auto &c : filename) {
-        if (c == ' ' || c == '/') c = '_';
-    }
+inline void WriteCSVRow(std::ofstream& ofs, const double value) {
+    ofs << std::setprecision(10) << value << "\n";
+}
+
+inline bool OpenCSVWithHeader(const std::string& output_dir,
+                              const std::string& metric_name,
+                              std::ofstream& ofs) {
     std::ostringstream path;
     path << output_dir;
     if (!output_dir.empty() && output_dir.back() != '/') path << '/';
-    path << filename << ".csv";
+    path << SanitizeMetricName(metric_name) << ".csv";
 
-    std::ofstream ofs(path.str());
+    ofs.open(path.str());
     if (!ofs.is_open()) {
         std::cerr << "Failed to write CSV file: " << path.str() << std::endl;
-        return;
+        return false;
     }
     ofs << "value\n";
-    for (const auto &v : _values) {
-        // write with high precision
-        ofs << std::setprecision(10) << v << "\n";
-    }
-    ofs.close();
+    return true;
 }
 
+inline bool OpenPositionsCSVWithHeader(const std::string& output_dir,
+                                       const std::string& metric_name,
+                                       std::ofstream& ofs) {
+    std::ostringstream path;
+    path << output_dir;
+    if (!output_dir.empty() && output_dir.back() != '/') path << '/';
+    path << SanitizeMetricName(metric_name) << ".csv";
 
+    ofs.open(path.str());
+    if (!ofs.is_open()) {
+        std::cerr << "Failed to write positions CSV: " << path.str() << std::endl;
+        return false;
+    }
+    ofs << "positions\n";
+    return true;
+}
 
-// Statistic class for edit paths
+inline void WritePositionsCSVRow(std::ofstream& ofs, const std::vector<int>& row) {
+    if (row.empty()) {
+        ofs << "\n";
+        return;
+    }
+    bool first = true;
+    for (const int value : row) {
+        if (!first) ofs << ',';
+        ofs << value;
+        first = false;
+    }
+    ofs << "\n";
+}
+
+struct PathOperationCounts {
+    unsigned long node_insertions = 0;
+    unsigned long node_deletions = 0;
+    unsigned long node_relabels = 0;
+    unsigned long edge_insertions = 0;
+    unsigned long edge_deletions = 0;
+    unsigned long edge_relabels = 0;
+    size_t num_operations = 0;
+};
+
 class EditPathStatistics {
 public:
-    // Default constructor deleted - references must be initialized
     EditPathStatistics() = delete;
-    explicit EditPathStatistics(const GraphData<UDataGraph>& edit_paths, const std::vector<std::tuple<INDEX, INDEX, INDEX, EditOperation>>& edit_path_info);
+    explicit EditPathStatistics(const GraphData<UDataGraph>* edit_paths,
+                                const std::vector<std::tuple<INDEX, INDEX, INDEX, EditOperation>>& edit_path_info,
+                                bool include_graph_metrics);
     void PrintStatistics() const;
-    // Write all contained ValueStatistics to CSV files inside the provided directory.
     void WriteCSVFiles(const std::string& output_dir) const;
     void WritePositionCSVFiles(const std::string& output_dir) const;
+    [[nodiscard]] unsigned long GetNumGraphs() const { return _num_graphs; }
+    [[nodiscard]] double GetAveragePathLength() const { return _path_length_stats.GetAverage(); }
+    [[nodiscard]] double GetAverageNodeInsertions() const { return _node_insertions_stats.GetAverage(); }
+    [[nodiscard]] double GetAverageNodeDeletions() const { return _node_deletions_stats.GetAverage(); }
+    [[nodiscard]] double GetAverageNodeRelabels() const { return _node_relabels_stats.GetAverage(); }
+    [[nodiscard]] double GetAverageEdgeInsertions() const { return _edge_insertions_stats.GetAverage(); }
+    [[nodiscard]] double GetAverageEdgeDeletions() const { return _edge_deletions_stats.GetAverage(); }
+    [[nodiscard]] double GetAverageEdgeRelabels() const { return _edge_relabels_stats.GetAverage(); }
+    [[nodiscard]] bool HasGraphMetrics() const { return _include_graph_metrics; }
 private:
-    const GraphData<UDataGraph>& _edit_paths;  // const ref to avoid copy
-    const std::vector<std::tuple<INDEX, INDEX, INDEX, EditOperation>>& _edit_path_info;  // const ref to avoid copy
+    void BuildStatistics();
+    void AddOperation(const EditOperation& op, PathOperationCounts& counts) const;
+    void AddGraphPathMetrics(size_t graph_start_idx, size_t num_operations, ValueStatistics* num_nodes, ValueStatistics* num_edges, ValueStatistics* disconnected) const;
+
+    const GraphData<UDataGraph>* _edit_paths;
+    const std::vector<std::tuple<INDEX, INDEX, INDEX, EditOperation>>& _edit_path_info;
+    bool _include_graph_metrics = false;
+    unsigned long _num_graphs = 0;
     ValueStatistics _num_nodes_stats;
     ValueStatistics _num_edges_stats;
     ValueStatistics _num_operations_stats;
@@ -142,199 +184,30 @@ private:
     ValueStatistics _edge_deletions_stats;
     ValueStatistics _edge_relabels_stats;
     ValueStatistics _connectedness_stats;
-    // Per-path position lists (each inner vector corresponds to one edit path and stores positions/indexes where that operation occurred)
-    std::vector<std::vector<int>> _node_insertion_positions;
-    std::vector<std::vector<int>> _node_deletion_positions;
-    std::vector<std::vector<int>> _node_relabel_positions;
-    std::vector<std::vector<int>> _edge_insertion_positions;
-    std::vector<std::vector<int>> _edge_deletion_positions;
-    std::vector<std::vector<int>> _edge_relabel_positions;
 };
 
-EditPathStatistics::EditPathStatistics(const GraphData<UDataGraph> &edit_paths, const std::vector<std::tuple<INDEX, INDEX, INDEX, EditOperation>> &edit_path_info)
-    : _edit_paths(edit_paths), _edit_path_info(edit_path_info) {
-    std::vector<double> num_nodes;
-    std::vector<double> num_edges;
-    std::vector<double> num_operations;
-    std::vector<double> path_lengths;
-    std::vector<double> node_insertions;
-    std::vector<double> node_deletions;
-    std::vector<double> node_relabels;
-    std::vector<double> edge_insertions;
-    std::vector<double> edge_deletions;
-    std::vector<double> edge_relabels;
-    std::vector<double> graphs_unconnected;
-    const unsigned long bucket_size = 10;
-    std::vector<BucketOperations> buckets ( bucket_size );
-
-    // Map to count operations per (source_id, target_id)
-    std::unordered_map<std::pair<INDEX, INDEX>, std::vector<EditOperation>, PairHash> operations_map;
-    std::unordered_map<std::pair<INDEX, INDEX>, std::pair<INDEX, INDEX>, PairHash> graph_positions_map;
-    INDEX position = -1;
-    for (const auto& entry : _edit_path_info) {
-        INDEX source_id = std::get<0>(entry);
-        INDEX step_id = std::get<1>(entry);
-        INDEX target_id = std::get<2>(entry);
-        if (step_id == 0) {
-            ++position;
-            auto source_graph = &_edit_paths.graphData[position];
-            std::string source_graph_name = source_graph->GetName();
-            // print name
-            std::cout << "Processing edit paths for source graph: " << source_graph_name << std::endl;
-            graph_positions_map[{source_id, target_id}] = {position, position + 1};
-        }
-        else {
-            graph_positions_map[{source_id, std::get<2>(entry)}].second += 1;
-        }
-        ++position;
-
-        EditOperation operation = std::get<3>(entry);
-        operations_map[{source_id, target_id}].push_back(operation);
-    }
-
-    // Reserve space for statistics vectors based on number of paths
-    const size_t num_paths = operations_map.size();
-    num_nodes.reserve(num_paths * 10);  // estimate: ~10 graphs per path on average
-    num_edges.reserve(num_paths * 10);
-    num_operations.reserve(num_paths);
-    path_lengths.reserve(num_paths);
-    node_insertions.reserve(num_paths);
-    node_deletions.reserve(num_paths);
-    node_relabels.reserve(num_paths);
-    edge_insertions.reserve(num_paths);
-    edge_deletions.reserve(num_paths);
-    edge_relabels.reserve(num_paths);
-    graphs_unconnected.reserve(num_paths);
-
-    // Reserve space for position vectors
-    _node_insertion_positions.reserve(num_paths);
-    _node_deletion_positions.reserve(num_paths);
-    _node_relabel_positions.reserve(num_paths);
-    _edge_insertion_positions.reserve(num_paths);
-    _edge_deletion_positions.reserve(num_paths);
-    _edge_relabel_positions.reserve(num_paths);
-
-    // Now calculate statistics based on operations_map
-    for (const auto& [key, operations] : operations_map) {
-        INDEX source_id = key.first;
-        INDEX target_id = key.second;
-
-        // Find all graphs corresponding to the current path order in operations_map is the same as in edit_paths
-        std::vector<const UDataGraph*> path_graphs = std::vector<const UDataGraph*>(operations.size() + 1, nullptr);
-        for (INDEX i = 0; i < path_graphs.size(); ++i) {
-            INDEX graph_index = graph_positions_map[{source_id, target_id}].first;
-            path_graphs[i] = &_edit_paths.graphData[graph_index + i];
-        }
-
-        if (!path_graphs.empty()) {
-            graphs_unconnected.push_back(0.0);
-            for (const auto& g : path_graphs) {
-                if (g == nullptr) continue;
-                num_nodes.push_back(static_cast<double>(g->nodes()));
-                num_edges.push_back(static_cast<double>(g->edges()));
-                // print whether the graph is connected
-                std::string graph_name = g->GetName();
-                // const_cast needed because libGraph's GetConnectivity() is not const-qualified
-                bool connected = const_cast<UDataGraph*>(g)->GetConnectivity();
-                if (!connected) {
-                    graphs_unconnected.back() += 1.0;
-                }
-            }
-            node_insertions.push_back(0.0);
-            node_deletions.push_back(0.0);
-            node_relabels.push_back(0.0);
-            edge_insertions.push_back(0.0);
-            edge_deletions.push_back(0.0);
-            edge_relabels.push_back(0.0);
-
-            unsigned long bucket_counter = 0;
-            unsigned long operation_counter = 0;
-            // per-path positional lists for this path
-            std::vector<int> node_insert_pos;
-            std::vector<int> node_delete_pos;
-            std::vector<int> node_relabel_pos;
-            std::vector<int> edge_insert_pos;
-            std::vector<int> edge_delete_pos;
-            std::vector<int> edge_relabel_pos;
-            // Reserve space for per-path position vectors (worst case: all operations of one type)
-            const size_t ops_size = operations.size();
-            node_insert_pos.reserve(ops_size);
-            node_delete_pos.reserve(ops_size);
-            node_relabel_pos.reserve(ops_size);
-            edge_insert_pos.reserve(ops_size);
-            edge_delete_pos.reserve(ops_size);
-            edge_relabel_pos.reserve(ops_size);
-            for (const auto& op : operations) {
-                // make divisor explicit as double to avoid narrowing warnings
-                auto ops_size_d = static_cast<double>(operations.size());
-                double bucket_divisor = ops_size_d / static_cast<double>(bucket_size);
-                bucket_counter = std::min(static_cast<unsigned long>(std::floor(static_cast<double>(operation_counter) / bucket_divisor)), bucket_size - 1);
-                switch (op.operationObject) {
-                    case OperationObject::NODE:
-                        if (op.type == EditType::INSERT) {
-                            node_insertions.back() += 1.0;
-                            node_insert_pos.push_back(static_cast<int>(operation_counter));
-                            buckets[bucket_counter]._node_insertions += 1;
-                        } else if (op.type == EditType::DELETE) {
-                            node_deletions.back() += 1.0;
-                            node_delete_pos.push_back(static_cast<int>(operation_counter));
-                            buckets[bucket_counter]._node_deletions += 1;
-                        } else if (op.type == EditType::RELABEL) {
-                            node_relabels.back() += 1.0;
-                            node_relabel_pos.push_back(static_cast<int>(operation_counter));
-                            buckets[bucket_counter]._node_relabels += 1;
-                        }
-                        break;
-                    case OperationObject::EDGE:
-                        if (op.type == EditType::INSERT) {
-                            edge_insertions.back() += 1.0;
-                            edge_insert_pos.push_back(static_cast<int>(operation_counter));
-                            buckets[bucket_counter]._edge_insertions += 1;
-                        } else if (op.type == EditType::DELETE) {
-                            edge_deletions.back() += 1.0;
-                            edge_delete_pos.push_back(static_cast<int>(operation_counter));
-                            buckets[bucket_counter]._edge_deletions += 1;
-                        } else if (op.type == EditType::RELABEL) {
-                            edge_relabels.back() += 1.0;
-                            edge_relabel_pos.push_back(static_cast<int>(operation_counter));
-                            buckets[bucket_counter]._edge_relabels += 1;
-                        }
-                        break;
-                    default:
-                        break;
-                }
-                operation_counter += 1;
-            }
-            // store per-path positions into the global vectors
-            _node_insertion_positions.push_back(std::move(node_insert_pos));
-            _node_deletion_positions.push_back(std::move(node_delete_pos));
-            _node_relabel_positions.push_back(std::move(node_relabel_pos));
-            _edge_insertion_positions.push_back(std::move(edge_insert_pos));
-            _edge_deletion_positions.push_back(std::move(edge_delete_pos));
-            _edge_relabel_positions.push_back(std::move(edge_relabel_pos));
-            num_operations.push_back(static_cast<double>(operations.size()));
-            path_lengths.push_back(static_cast<double>(operations.size()));
-        }
-    }
-
-    _num_nodes_stats = ValueStatistics("Number of Nodes", num_nodes);
-    _num_edges_stats = ValueStatistics("Number of Edges", num_edges);
-    _num_operations_stats = ValueStatistics("Number of Operations", num_operations);
-    _path_length_stats = ValueStatistics("Path Length", path_lengths);
-    _node_insertions_stats = ValueStatistics("Node Insertions", node_insertions);
-    _node_deletions_stats = ValueStatistics("Node Deletions", node_deletions);
-    _node_relabels_stats = ValueStatistics("Node Relabels", node_relabels);
-    _edge_insertions_stats = ValueStatistics("Edge Insertions", edge_insertions);
-    _edge_deletions_stats = ValueStatistics("Edge Deletions", edge_deletions);
-    _edge_relabels_stats = ValueStatistics("Edge Relabels", edge_relabels);
-    _connectedness_stats = ValueStatistics("Graphs Unconnected", graphs_unconnected);
-
-
+EditPathStatistics::EditPathStatistics(const GraphData<UDataGraph>* edit_paths,
+                                       const std::vector<std::tuple<INDEX, INDEX, INDEX, EditOperation>>& edit_path_info,
+                                       const bool include_graph_metrics)
+    : _edit_paths(edit_paths),
+      _edit_path_info(edit_path_info),
+      _include_graph_metrics(include_graph_metrics && edit_paths != nullptr),
+      _num_nodes_stats("Number of Nodes"),
+      _num_edges_stats("Number of Edges"),
+      _num_operations_stats("Number of Operations"),
+      _path_length_stats("Path Length"),
+      _node_insertions_stats("Node Insertions"),
+      _node_deletions_stats("Node Deletions"),
+      _node_relabels_stats("Node Relabels"),
+      _edge_insertions_stats("Edge Insertions"),
+      _edge_deletions_stats("Edge Deletions"),
+      _edge_relabels_stats("Edge Relabels"),
+      _connectedness_stats("Graphs Unconnected") {
+    BuildStatistics();
 }
+
 void EditPathStatistics::PrintStatistics() const {
     std::cout << "Edit Path Statistics:\n";
-    _num_nodes_stats.PrintStatistics();
-    _num_edges_stats.PrintStatistics();
     _num_operations_stats.PrintStatistics();
     _path_length_stats.PrintStatistics();
     _node_insertions_stats.PrintStatistics();
@@ -343,82 +216,489 @@ void EditPathStatistics::PrintStatistics() const {
     _edge_insertions_stats.PrintStatistics();
     _edge_deletions_stats.PrintStatistics();
     _edge_relabels_stats.PrintStatistics();
-    _connectedness_stats.PrintStatistics();
+    if (_include_graph_metrics) {
+        _num_nodes_stats.PrintStatistics();
+        _num_edges_stats.PrintStatistics();
+        _connectedness_stats.PrintStatistics();
+    } else {
+        std::cout << "Graph-level statistics skipped (low-memory mode enabled).\n";
+    }
 }
 
 void EditPathStatistics::WriteCSVFiles(const std::string &output_dir) const {
-    // Create directory and write each ValueStatistics as its own CSV
-    _num_nodes_stats.WriteCSV(output_dir);
-    _num_edges_stats.WriteCSV(output_dir);
-    _num_operations_stats.WriteCSV(output_dir);
-    _path_length_stats.WriteCSV(output_dir);
-    _node_insertions_stats.WriteCSV(output_dir);
-    _node_deletions_stats.WriteCSV(output_dir);
-    _node_relabels_stats.WriteCSV(output_dir);
-    _edge_insertions_stats.WriteCSV(output_dir);
-    _edge_deletions_stats.WriteCSV(output_dir);
-    _edge_relabels_stats.WriteCSV(output_dir);
-    _connectedness_stats.WriteCSV(output_dir);
-}
-
-// Write per-path positions CSV files: each row corresponds to a path and contains comma-separated positions (or empty if none)
-void WritePositionsCSVFile(const std::string &output_dir, const std::string &name, const std::vector<std::vector<int>> &positions_vec) {
     namespace fs = std::filesystem;
-    try { fs::create_directories(output_dir); } catch(...) {}
-    std::string filename = name;
-    for (auto &c : filename) if (c == ' ' || c == '/') c = '_';
-    std::ostringstream path;
-    path << output_dir; if (!output_dir.empty() && output_dir.back() != '/') path << '/';
-    path << filename << ".csv";
+    EnsureDirectory(output_dir);
 
-    std::ofstream ofs(path.str());
-    if (!ofs.is_open()) { std::cerr << "Failed to write positions CSV: " << path.str() << std::endl; return; }
-    ofs << "positions\n";
-    for (const auto &row : positions_vec) {
-        if (row.empty()) { ofs << "\n"; continue; }
-        bool first = true;
-        for (int v : row) {
-            if (!first) ofs << ',';
-            ofs << v;
-            first = false;
+    std::ofstream num_nodes_csv;
+    std::ofstream num_edges_csv;
+    std::ofstream num_operations_csv;
+    std::ofstream path_length_csv;
+    std::ofstream node_insertions_csv;
+    std::ofstream node_deletions_csv;
+    std::ofstream node_relabels_csv;
+    std::ofstream edge_insertions_csv;
+    std::ofstream edge_deletions_csv;
+    std::ofstream edge_relabels_csv;
+    std::ofstream unconnected_csv;
+
+    if (!OpenCSVWithHeader(output_dir, "Number of Operations", num_operations_csv)) return;
+    if (!OpenCSVWithHeader(output_dir, "Path Length", path_length_csv)) return;
+    if (!OpenCSVWithHeader(output_dir, "Node Insertions", node_insertions_csv)) return;
+    if (!OpenCSVWithHeader(output_dir, "Node Deletions", node_deletions_csv)) return;
+    if (!OpenCSVWithHeader(output_dir, "Node Relabels", node_relabels_csv)) return;
+    if (!OpenCSVWithHeader(output_dir, "Edge Insertions", edge_insertions_csv)) return;
+    if (!OpenCSVWithHeader(output_dir, "Edge Deletions", edge_deletions_csv)) return;
+    if (!OpenCSVWithHeader(output_dir, "Edge Relabels", edge_relabels_csv)) return;
+    if (_include_graph_metrics) {
+        if (!OpenCSVWithHeader(output_dir, "Number of Nodes", num_nodes_csv)) return;
+        if (!OpenCSVWithHeader(output_dir, "Number of Edges", num_edges_csv)) return;
+        if (!OpenCSVWithHeader(output_dir, "Graphs Unconnected", unconnected_csv)) return;
+    } else {
+        for (const std::string& metric : {"Number of Nodes", "Number of Edges", "Graphs Unconnected"}) {
+            std::ostringstream stale_path;
+            stale_path << output_dir;
+            if (!output_dir.empty() && output_dir.back() != '/') stale_path << '/';
+            stale_path << SanitizeMetricName(metric) << ".csv";
+            std::error_code ec;
+            fs::remove(stale_path.str(), ec);
         }
-        ofs << "\n";
     }
-    ofs.close();
+
+    bool has_path = false;
+    size_t current_ops = 0;
+    size_t graph_cursor = 0;
+    PathOperationCounts counts;
+    auto flush_path = [&]() {
+        if (!has_path) return;
+        WriteCSVRow(num_operations_csv, static_cast<double>(counts.num_operations));
+        WriteCSVRow(path_length_csv, static_cast<double>(counts.num_operations));
+        WriteCSVRow(node_insertions_csv, static_cast<double>(counts.node_insertions));
+        WriteCSVRow(node_deletions_csv, static_cast<double>(counts.node_deletions));
+        WriteCSVRow(node_relabels_csv, static_cast<double>(counts.node_relabels));
+        WriteCSVRow(edge_insertions_csv, static_cast<double>(counts.edge_insertions));
+        WriteCSVRow(edge_deletions_csv, static_cast<double>(counts.edge_deletions));
+        WriteCSVRow(edge_relabels_csv, static_cast<double>(counts.edge_relabels));
+
+        if (_include_graph_metrics) {
+            double disconnected_graphs = 0.0;
+            if (graph_cursor + current_ops < _edit_paths->graphData.size()) {
+                for (size_t i = 0; i <= current_ops; ++i) {
+                    const auto& graph = _edit_paths->graphData[graph_cursor + i];
+                    WriteCSVRow(num_nodes_csv, static_cast<double>(graph.nodes()));
+                    WriteCSVRow(num_edges_csv, static_cast<double>(graph.edges()));
+                    const bool connected = const_cast<UDataGraph&>(graph).GetConnectivity();
+                    if (!connected) disconnected_graphs += 1.0;
+                }
+            } else {
+                std::cerr << "Warning: Graph index mismatch while writing CSV values." << std::endl;
+            }
+            WriteCSVRow(unconnected_csv, disconnected_graphs);
+            graph_cursor += current_ops + 1;
+        }
+        counts = PathOperationCounts{};
+        current_ops = 0;
+    };
+
+    for (const auto& entry : _edit_path_info) {
+        const INDEX step_id = std::get<1>(entry);
+        if (step_id == 0) {
+            flush_path();
+            has_path = true;
+        }
+        if (!has_path) has_path = true;
+        AddOperation(std::get<3>(entry), counts);
+        current_ops += 1;
+    }
+    flush_path();
 }
 
 void EditPathStatistics::WritePositionCSVFiles(const std::string &output_dir) const {
-    WritePositionsCSVFile(output_dir, "Node_Insertions_Positions", _node_insertion_positions);
-    WritePositionsCSVFile(output_dir, "Node_Deletions_Positions", _node_deletion_positions);
-    WritePositionsCSVFile(output_dir, "Node_Relabels_Positions", _node_relabel_positions);
-    WritePositionsCSVFile(output_dir, "Edge_Insertions_Positions", _edge_insertion_positions);
-    WritePositionsCSVFile(output_dir, "Edge_Deletions_Positions", _edge_deletion_positions);
-    WritePositionsCSVFile(output_dir, "Edge_Relabels_Positions", _edge_relabel_positions);
+    EnsureDirectory(output_dir);
+
+    std::ofstream node_insertions_pos_csv;
+    std::ofstream node_deletions_pos_csv;
+    std::ofstream node_relabels_pos_csv;
+    std::ofstream edge_insertions_pos_csv;
+    std::ofstream edge_deletions_pos_csv;
+    std::ofstream edge_relabels_pos_csv;
+
+    if (!OpenPositionsCSVWithHeader(output_dir, "Node Insertions Positions", node_insertions_pos_csv)) return;
+    if (!OpenPositionsCSVWithHeader(output_dir, "Node Deletions Positions", node_deletions_pos_csv)) return;
+    if (!OpenPositionsCSVWithHeader(output_dir, "Node Relabels Positions", node_relabels_pos_csv)) return;
+    if (!OpenPositionsCSVWithHeader(output_dir, "Edge Insertions Positions", edge_insertions_pos_csv)) return;
+    if (!OpenPositionsCSVWithHeader(output_dir, "Edge Deletions Positions", edge_deletions_pos_csv)) return;
+    if (!OpenPositionsCSVWithHeader(output_dir, "Edge Relabels Positions", edge_relabels_pos_csv)) return;
+
+    bool has_path = false;
+    std::vector<int> node_insert_pos;
+    std::vector<int> node_delete_pos;
+    std::vector<int> node_relabel_pos;
+    std::vector<int> edge_insert_pos;
+    std::vector<int> edge_delete_pos;
+    std::vector<int> edge_relabel_pos;
+    int operation_counter = 0;
+
+    auto flush_path = [&]() {
+        if (!has_path) return;
+        WritePositionsCSVRow(node_insertions_pos_csv, node_insert_pos);
+        WritePositionsCSVRow(node_deletions_pos_csv, node_delete_pos);
+        WritePositionsCSVRow(node_relabels_pos_csv, node_relabel_pos);
+        WritePositionsCSVRow(edge_insertions_pos_csv, edge_insert_pos);
+        WritePositionsCSVRow(edge_deletions_pos_csv, edge_delete_pos);
+        WritePositionsCSVRow(edge_relabels_pos_csv, edge_relabel_pos);
+        node_insert_pos.clear();
+        node_delete_pos.clear();
+        node_relabel_pos.clear();
+        edge_insert_pos.clear();
+        edge_delete_pos.clear();
+        edge_relabel_pos.clear();
+        operation_counter = 0;
+    };
+
+    for (const auto& entry : _edit_path_info) {
+        const INDEX step_id = std::get<1>(entry);
+        if (step_id == 0) {
+            flush_path();
+            has_path = true;
+        }
+        if (!has_path) has_path = true;
+
+        const auto& op = std::get<3>(entry);
+        switch (op.operationObject) {
+            case OperationObject::NODE:
+                if (op.type == EditType::INSERT) node_insert_pos.push_back(operation_counter);
+                else if (op.type == EditType::DELETE) node_delete_pos.push_back(operation_counter);
+                else if (op.type == EditType::RELABEL) node_relabel_pos.push_back(operation_counter);
+                break;
+            case OperationObject::EDGE:
+                if (op.type == EditType::INSERT) edge_insert_pos.push_back(operation_counter);
+                else if (op.type == EditType::DELETE) edge_delete_pos.push_back(operation_counter);
+                else if (op.type == EditType::RELABEL) edge_relabel_pos.push_back(operation_counter);
+                break;
+            default:
+                break;
+        }
+        operation_counter += 1;
+    }
+    flush_path();
+}
+
+void EditPathStatistics::AddOperation(const EditOperation& op, PathOperationCounts& counts) const {
+    switch (op.operationObject) {
+        case OperationObject::NODE:
+            if (op.type == EditType::INSERT) counts.node_insertions += 1;
+            else if (op.type == EditType::DELETE) counts.node_deletions += 1;
+            else if (op.type == EditType::RELABEL) counts.node_relabels += 1;
+            break;
+        case OperationObject::EDGE:
+            if (op.type == EditType::INSERT) counts.edge_insertions += 1;
+            else if (op.type == EditType::DELETE) counts.edge_deletions += 1;
+            else if (op.type == EditType::RELABEL) counts.edge_relabels += 1;
+            break;
+        default:
+            break;
+    }
+    counts.num_operations += 1;
+}
+
+void EditPathStatistics::AddGraphPathMetrics(const size_t graph_start_idx,
+                                             const size_t num_operations,
+                                             ValueStatistics* num_nodes,
+                                             ValueStatistics* num_edges,
+                                             ValueStatistics* disconnected) const {
+    if (!_include_graph_metrics || _edit_paths == nullptr) return;
+    const size_t graph_count = num_operations + 1;
+    if (graph_start_idx + graph_count > _edit_paths->graphData.size()) {
+        std::cerr << "Warning: Path graph indices exceed loaded graph data." << std::endl;
+        return;
+    }
+
+    double num_disconnected = 0.0;
+    for (size_t i = 0; i < graph_count; ++i) {
+        const auto& graph = _edit_paths->graphData[graph_start_idx + i];
+        if (num_nodes != nullptr) num_nodes->AddValue(static_cast<double>(graph.nodes()));
+        if (num_edges != nullptr) num_edges->AddValue(static_cast<double>(graph.edges()));
+        const bool connected = const_cast<UDataGraph&>(graph).GetConnectivity();
+        if (!connected) num_disconnected += 1.0;
+    }
+    if (disconnected != nullptr) disconnected->AddValue(num_disconnected);
+}
+
+void EditPathStatistics::BuildStatistics() {
+    if (_edit_path_info.empty()) return;
+
+    bool has_path = false;
+    PathOperationCounts counts;
+    size_t current_ops = 0;
+    size_t graph_cursor = 0;
+
+    auto flush_path = [&]() {
+        if (!has_path) return;
+        _num_operations_stats.AddValue(static_cast<double>(counts.num_operations));
+        _path_length_stats.AddValue(static_cast<double>(counts.num_operations));
+        _node_insertions_stats.AddValue(static_cast<double>(counts.node_insertions));
+        _node_deletions_stats.AddValue(static_cast<double>(counts.node_deletions));
+        _node_relabels_stats.AddValue(static_cast<double>(counts.node_relabels));
+        _edge_insertions_stats.AddValue(static_cast<double>(counts.edge_insertions));
+        _edge_deletions_stats.AddValue(static_cast<double>(counts.edge_deletions));
+        _edge_relabels_stats.AddValue(static_cast<double>(counts.edge_relabels));
+        _num_graphs += static_cast<unsigned long>(current_ops + 1);
+
+        if (_include_graph_metrics) {
+            AddGraphPathMetrics(graph_cursor, current_ops, &_num_nodes_stats, &_num_edges_stats, &_connectedness_stats);
+            graph_cursor += current_ops + 1;
+        }
+        counts = PathOperationCounts{};
+        current_ops = 0;
+    };
+
+    for (const auto& entry : _edit_path_info) {
+        const INDEX step_id = std::get<1>(entry);
+        if (step_id == 0) {
+            flush_path();
+            has_path = true;
+        }
+        if (!has_path) has_path = true;
+        AddOperation(std::get<3>(entry), counts);
+        current_ops += 1;
+    }
+    flush_path();
+}
+
+inline std::string FormatDouble2DP(double value) {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(2) << value;
+    return oss.str();
+}
+
+inline std::string FormatIntWithLatexGrouping(unsigned long value) {
+    std::string s = std::to_string(value);
+    std::string out;
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (i > 0 && ((s.size() - i) % 3 == 0)) out += "\\,";
+        out += s[i];
+    }
+    return out;
+}
+
+inline bool ExtractResultsRoot(const std::string& edit_path_output,
+                               std::filesystem::path& results_root) {
+    namespace fs = std::filesystem;
+    fs::path p(edit_path_output);
+    p = p.lexically_normal();
+
+    fs::path prefix;
+    for (const auto& part : p) {
+        const std::string token = part.string();
+        if (token.rfind("Paths_", 0) == 0) {
+            results_root = prefix;
+            return true;
+        }
+        prefix /= part;
+    }
+    return false;
+}
+
+inline std::optional<double> ComputeAverageFromValueCSV(const std::filesystem::path& csv_path) {
+    std::ifstream ifs(csv_path);
+    if (!ifs.is_open()) return std::nullopt;
+
+    std::string line;
+    if (!std::getline(ifs, line)) return std::nullopt; // header
+
+    double sum = 0.0;
+    unsigned long count = 0;
+    while (std::getline(ifs, line)) {
+        if (line.empty()) continue;
+        std::istringstream iss(line);
+        double v = 0.0;
+        iss >> v;
+        if (iss.fail()) continue;
+        sum += v;
+        ++count;
+    }
+    if (count == 0) return std::nullopt;
+    return sum / static_cast<double>(count);
+}
+
+inline std::string StrategyLabel(const std::string& strategy) {
+    if (strategy == "i-E_d-IsoN") return "$+E$";
+    if (strategy == "d-E_d-IsoN") return "$-E$";
+    if (strategy == "Rnd_d-IsoN") return "Rnd";
+    if (strategy == "Rnd") return "Rnd (no iso cleanup)";
+    return strategy;
+}
+
+struct Table2StrategyRow {
+    std::string strategy_name;
+    std::string order_label;
+    double avg_nodes = 0.0;
+    double avg_edges = 0.0;
+    double avg_unconnected = 0.0;
+};
+
+inline int StrategySortKey(const std::string& strategy) {
+    if (strategy == "Rnd_d-IsoN") return 0;
+    if (strategy == "Rnd") return 1;
+    if (strategy == "i-E_d-IsoN") return 2;
+    if (strategy == "d-E_d-IsoN") return 3;
+    return 100;
+}
+
+inline std::vector<Table2StrategyRow> CollectTable2Rows(const std::filesystem::path& results_root,
+                                                        const std::string& method,
+                                                        const std::string& db) {
+    namespace fs = std::filesystem;
+    std::vector<Table2StrategyRow> rows;
+    if (!fs::exists(results_root) || !fs::is_directory(results_root)) return rows;
+
+    for (const auto& entry : fs::directory_iterator(results_root)) {
+        if (!entry.is_directory()) continue;
+        const std::string dir_name = entry.path().filename().string();
+        if (dir_name.rfind("Paths_", 0) != 0) continue;
+        const std::string strategy = dir_name.substr(std::string("Paths_").size());
+
+        fs::path eval_dir = entry.path() / method / db / "Evaluation";
+        auto avg_nodes = ComputeAverageFromValueCSV(eval_dir / "Number_of_Nodes.csv");
+        auto avg_edges = ComputeAverageFromValueCSV(eval_dir / "Number_of_Edges.csv");
+        auto avg_unconnected = ComputeAverageFromValueCSV(eval_dir / "Graphs_Unconnected.csv");
+
+        if (!avg_nodes || !avg_edges || !avg_unconnected) continue;
+
+        Table2StrategyRow row;
+        row.strategy_name = strategy;
+        row.order_label = StrategyLabel(strategy);
+        row.avg_nodes = *avg_nodes;
+        row.avg_edges = *avg_edges;
+        row.avg_unconnected = *avg_unconnected;
+        rows.push_back(row);
+    }
+
+    std::ranges::sort(rows, [](const Table2StrategyRow& a, const Table2StrategyRow& b) {
+        const int a_key = StrategySortKey(a.strategy_name);
+        const int b_key = StrategySortKey(b.strategy_name);
+        if (a_key != b_key) return a_key < b_key;
+        return a.strategy_name < b.strategy_name;
+    });
+    return rows;
+}
+
+inline bool WriteTable1RowTex(const std::filesystem::path& output_path,
+                              const std::string& db,
+                              const EditPathStatistics& stats) {
+    std::ofstream ofs(output_path);
+    if (!ofs.is_open()) {
+        std::cerr << "Failed to write LaTeX file: " << output_path << std::endl;
+        return false;
+    }
+
+    ofs << db << " & $" << FormatIntWithLatexGrouping(stats.GetNumGraphs()) << "$ & $"
+        << FormatDouble2DP(stats.GetAveragePathLength()) << "$ & $"
+        << FormatDouble2DP(stats.GetAverageNodeInsertions()) << "$ & $"
+        << FormatDouble2DP(stats.GetAverageNodeDeletions()) << "$ & $"
+        << FormatDouble2DP(stats.GetAverageNodeRelabels()) << "$ & $"
+        << FormatDouble2DP(stats.GetAverageEdgeInsertions()) << "$ & $"
+        << FormatDouble2DP(stats.GetAverageEdgeDeletions()) << "$ & $"
+        << FormatDouble2DP(stats.GetAverageEdgeRelabels()) << "$ \\\\\n";
+    return true;
+}
+
+inline bool WriteTable2Tex(const std::filesystem::path& output_path,
+                           const std::string& method,
+                           const std::string& db,
+                           const std::vector<Table2StrategyRow>& rows) {
+    std::ofstream ofs(output_path);
+    if (!ofs.is_open()) {
+        std::cerr << "Failed to write LaTeX file: " << output_path << std::endl;
+        return false;
+    }
+
+    ofs << "\\begin{table}[t]\n";
+    ofs << "\\centering\n";
+    ofs << "\\begin{tabular}{l c c c c}\n";
+    ofs << "\\toprule\n";
+    ofs << "Order & Unique Graphs & \\#Nodes & \\#Edges & \\#Discon.~Graphs \\\\\n";
+    ofs << "\\midrule\n";
+    if (rows.empty()) {
+        ofs << "% no strategy data found for method " << method << " and dataset " << db << "\n";
+    } else {
+        for (const auto& row : rows) {
+            ofs << row.order_label << " & -- & $" << FormatDouble2DP(row.avg_nodes)
+                << "$ & $" << FormatDouble2DP(row.avg_edges)
+                << "$ & $" << FormatDouble2DP(row.avg_unconnected) << "$ \\\\\n";
+        }
+    }
+    ofs << "\\bottomrule\n";
+    ofs << "\\end{tabular}\n";
+    ofs << "\\caption{Heuristic results for " << db << ". Unique Graphs is left blank and can be filled by WL analysis.}\n";
+    ofs << "\\end{table}\n";
+    return true;
 }
 
 
 inline int analyze_edit_path_graphs(const std::string& db,
                                     const std::string& edit_path_output,
-                                    const std::string& method) {
+                                    const std::string& method,
+                                    const bool low_memory = false) {
     std::string edit_path_output_db = edit_path_output + method + "/" + db + "/";
 
-    // Load MUTAG edit paths
+    // print what you are doing in which dir
+    std::cout << "Reading path data from directory: " << edit_path_output_db << "\n";
+    std::cout << "Writing analysis to: " << edit_path_output_db + "Evaluation" << "\n";
+
     GraphData<UDataGraph> edit_paths;
+    GraphData<UDataGraph>* edit_paths_ptr = nullptr;
     std::vector<std::tuple<INDEX, INDEX, INDEX, EditOperation>> edit_path_info;
-    edit_paths.Load(edit_path_output_db + db + "_edit_paths.bgf");
+
+    if (!low_memory) {
+        edit_paths.Load(edit_path_output_db + db + "_edit_paths.bgf");
+        edit_paths_ptr = &edit_paths;
+    } else {
+        std::cout << "Low-memory mode enabled: skipping BGF graph load and graph-level metrics.\n";
+    }
+
     std::string info_path = edit_path_output_db + db + "_edit_paths_data.bin";
     ReadEditPathInfo(info_path, edit_path_info);
-    EditPathStatistics stats(edit_paths, edit_path_info);
+    if (edit_path_info.empty()) {
+        std::cerr << "No edit path info entries loaded from: " << info_path << "\n";
+        return 1;
+    }
+    EditPathStatistics stats(edit_paths_ptr, edit_path_info, !low_memory);
     stats.PrintStatistics();
 
     // Write evaluation CSVs under Results/Paths/<method>/<db>/Evaluation/ create directory if it does not exist
     std::string eval_dir = edit_path_output_db + "Evaluation/";
     if (!std::filesystem::exists(eval_dir)) {
-        std::filesystem::create_directory(eval_dir);
+        std::filesystem::create_directories(eval_dir);
     }
     stats.WriteCSVFiles(eval_dir);
     // Write per-path positions evaluation CSVs
     stats.WritePositionCSVFiles(eval_dir);
+
+    std::filesystem::path results_root;
+    bool extracted = ExtractResultsRoot(edit_path_output, results_root);
+    if (!extracted) {
+        std::cerr << "Warning: Could not infer Results root from edit path output '" << edit_path_output
+                  << "'. Skipping LaTeX export.\n";
+        return 0;
+    }
+
+    std::filesystem::path latex_dir = results_root / "Latex" / method / db;
+    try {
+        std::filesystem::create_directories(latex_dir);
+    } catch (const std::exception& e) {
+        std::cerr << "Warning: Failed to create LaTeX output directory " << latex_dir
+                  << ": " << e.what() << "\n";
+        return 0;
+    }
+
+    const std::filesystem::path table1_row_path = latex_dir / "table1_row.tex";
+    WriteTable1RowTex(table1_row_path, db, stats);
+
+    const auto table2_rows = CollectTable2Rows(results_root, method, db);
+    const std::filesystem::path table2_path = latex_dir / "table2.tex";
+    WriteTable2Tex(table2_path, method, db, table2_rows);
+
     return 0;
 }
 

@@ -101,6 +101,7 @@ int main(const int argc, const char * argv[]) {
         }
         else if (std::string(argv[i]) == "-num_pairs") {
             num_pairs = std::stoi(argv[i+1]);
+            ++i;
         }
         else if (std::string(argv[i]) == "-single_source") {
             single_source = std::stoi(argv[i+1]);

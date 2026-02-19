@@ -18,11 +18,20 @@ def main(strategy: str, method: str = "F2", database: str = "MUTAG", bgf_path: s
     from python_src.converter.bgf_to_torch_geometric import BGFInMemoryDataset
 
 
+
+
     if bgf_path == "":
         bgf_path = f"Results/Paths_{strategy}/{method}/{database}/{database}_edit_paths.bgf"
         # Use the directory containing the bgf as the dataset root so the processed file
         # will be written to <root>/processed/data.pt
         root_dir = dirname(bgf_path) or "."
+
+        # Check whether the converted .pt file already exists to avoid unnecessary processing
+        if os.path.exists(root_dir + "/processed/data.pt"):
+             print(f"Processed dataset already exists at: {root_dir}/processed/data.pt")
+             print("Skipping conversion.")
+             return
+
         print(f"Using strategy: {strategy}")
         print(f"Looking for BGF at: {bgf_path}")
     else:

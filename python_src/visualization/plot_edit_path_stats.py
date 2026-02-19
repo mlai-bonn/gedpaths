@@ -31,15 +31,14 @@ import math
 # module-level path for Python outputs; set in main()
 python_output_dir = None
 
+def _should_write(path: str) -> bool:
+    """Return True if we should create/overwrite an output file."""
+    return not os.path.exists(path)
+
 def py_out(filename: str) -> str:
-    """Return the absolute path under the python output directory for the given filename.
-    Ensures the directory exists.
-    """
-    global python_output_dir
-    if python_output_dir is None:
-        raise RuntimeError('python_output_dir not set; call from main after initialization')
-    os.makedirs(python_output_dir, exist_ok=True)
-    return os.path.join(python_output_dir, filename)
+    """Return an output path under Evaluation_Python (created in main())."""
+    base = python_output_dir or os.getcwd()
+    return os.path.join(base, filename)
 
 
 try:
@@ -100,10 +99,15 @@ def plot_csv_file(csv_path: str, save: bool = True, show: bool = False):
     if save:
         try:
             outpath = py_out(basename + '.png')
-            plt.savefig(outpath)
-            print(f"Saved plot to {outpath}")
-            # also write a data-embedded TeX (line + histogram)
-            write_tex_line_hist(outpath.replace('.png', '.tex'), values.values, title=f"Plot: {basename}")
+            if _should_write(outpath):
+                plt.savefig(outpath)
+                print(f"Saved plot to {outpath}")
+                # also write a data-embedded TeX (line + histogram)
+                tex_path = outpath.replace('.png', '.tex')
+                if _should_write(tex_path):
+                    write_tex_line_hist(tex_path, values.values, title=f"Plot: {basename}")
+            else:
+                print(f"Skipping existing plot: {outpath}")
         except Exception as e:
             print(f"Failed to save plot for {csv_path}: {e}")
 
@@ -193,8 +197,11 @@ def _process_positions_file(csv_path: str, dirpath: str, basename: str, save: bo
     counts = np.sum(mat, axis=0)
     counts_df = pd.DataFrame({'position': np.arange(width), 'count': counts})
     counts_csv = py_out(basename + '_counts.csv')
-    counts_df.to_csv(counts_csv, index=False)
-    print(f"Wrote position counts CSV: {counts_csv}")
+    if _should_write(counts_csv):
+        counts_df.to_csv(counts_csv, index=False)
+        print(f"Wrote position counts CSV: {counts_csv}")
+    else:
+        print(f"Skipping existing counts CSV: {counts_csv}")
 
     # plot counts line
     plt.figure(figsize=(10,4))
@@ -205,13 +212,14 @@ def _process_positions_file(csv_path: str, dirpath: str, basename: str, save: bo
     plt.grid(True)
     out_counts_png = py_out(basename + '_counts.png')
     if save:
-        plt.savefig(out_counts_png)
-        print(f"Saved counts plot: {out_counts_png}")
-        write_tex_positions_counts(out_counts_png.replace('.png', '.tex'), counts_df['position'].values, counts_df['count'].values, title=f"Counts per position for {basename}")
-    if show:
-        plt.show()
-    else:
-        plt.close()
+        if _should_write(out_counts_png):
+            plt.savefig(out_counts_png)
+            print(f"Saved counts plot: {out_counts_png}")
+            tex_path = out_counts_png.replace('.png', '.tex')
+            if _should_write(tex_path):
+                write_tex_positions_counts(tex_path, counts_df['position'].values, counts_df['count'].values, title=f"Counts per position for {basename}")
+        else:
+            print(f"Skipping existing counts plot: {out_counts_png}")
 
     # heatmap (may be large) - compute integer figure size to avoid float warnings
     heatmap_w = min(20, max(6, width // 2))
@@ -227,9 +235,14 @@ def _process_positions_file(csv_path: str, dirpath: str, basename: str, save: bo
     plt.ylabel('path index')
     out_heatmap = py_out(basename + '_heatmap.png')
     if save:
-        plt.savefig(out_heatmap)
-        print(f"Saved heatmap: {out_heatmap}")
-        write_tex_positions_heatmap(out_heatmap.replace('.png', '.tex'), mat, title=f"Heatmap for {basename}")
+        if _should_write(out_heatmap):
+            plt.savefig(out_heatmap)
+            print(f"Saved heatmap: {out_heatmap}")
+            tex_path = out_heatmap.replace('.png', '.tex')
+            if _should_write(tex_path):
+                write_tex_positions_heatmap(tex_path, mat, title=f"Heatmap for {basename}")
+        else:
+            print(f"Skipping existing heatmap: {out_heatmap}")
     if show:
         plt.show()
     else:
@@ -290,10 +303,15 @@ def plot_buckets_stacked(bucket_df: pd.DataFrame, out_png: str, normalize: bool 
     ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     if save:
-        plt.savefig(out_png)
-        print(f"Saved buckets plot: {out_png}")
-        # write data-embedded TeX file for buckets plot
-        write_tex_stacked_from_df(out_png.replace('.png', '.tex'), bucket_df, 'bucket', op_cols, 'bucket (path segment)', 'proportion' if normalize else 'count', ('Normalized ' if normalize else '') + 'Operation distribution across path buckets')
+        if _should_write(out_png):
+            plt.savefig(out_png)
+            print(f"Saved buckets plot: {out_png}")
+            # write data-embedded TeX file for buckets plot
+            tex_path = out_png.replace('.png', '.tex')
+            if _should_write(tex_path):
+                write_tex_stacked_from_df(tex_path, bucket_df, 'bucket', op_cols, 'bucket (path segment)', 'proportion' if normalize else 'count', ('Normalized ' if normalize else '') + 'Operation distribution across path buckets')
+        else:
+            print(f"Skipping existing buckets plot: {out_png}")
     if show:
         plt.show()
     else:
@@ -353,10 +371,15 @@ def plot_positions_bars(combined_df: pd.DataFrame, out_png: str, normalize: bool
 
     if save:
         try:
-            plt.savefig(out_png)
-            print(f"Saved positions stacked bar plot: {out_png}")
-            # write data-embedded TeX file for positions bar plot
-            write_tex_stacked_from_df(out_png.replace('.png', '.tex'), df, 'position', op_cols, 'position', 'count', 'Operation counts per position (stacked)')
+            if _should_write(out_png):
+                plt.savefig(out_png)
+                print(f"Saved positions stacked bar plot: {out_png}")
+                # write data-embedded TeX file for positions bar plot
+                tex_path = out_png.replace('.png', '.tex')
+                if _should_write(tex_path):
+                    write_tex_stacked_from_df(tex_path, df, 'position', op_cols, 'position', 'count', 'Operation counts per position (stacked)')
+            else:
+                print(f"Skipping existing positions plot: {out_png}")
         except Exception as e:
             print(f"Failed to save positions bar plot {out_png}: {e}")
     if show:
@@ -404,10 +427,15 @@ def plot_nodes_edges_per_position(mat_all: np.ndarray, nodes_vals: np.ndarray, e
     plt.tight_layout()
     out_abs = out_prefix + '_nodes_edges_absolute.png'
     if save:
-        plt.savefig(out_abs)
-        print(f'Saved nodes/edges per-position absolute plot: {out_abs}')
-        # write data-embedded TeX file for nodes/edges absolute plot
-        write_tex_nodes_edges_data(out_abs.replace('.png', '.tex'), positions, nodes_sum, edges_sum, caption='Sum of nodes and edges across paths per position (stacked)', normalized=False)
+        if _should_write(out_abs):
+            plt.savefig(out_abs)
+            print(f'Saved nodes/edges per-position absolute plot: {out_abs}')
+            # write data-embedded TeX file for nodes/edges absolute plot
+            tex_path = out_abs.replace('.png', '.tex')
+            if _should_write(tex_path):
+                write_tex_nodes_edges_data(tex_path, positions, nodes_sum, edges_sum, caption='Sum of nodes and edges across paths per position (stacked)', normalized=False)
+        else:
+            print(f"Skipping existing nodes/edges absolute plot: {out_abs}")
     if show:
         plt.show()
     else:
@@ -428,10 +456,15 @@ def plot_nodes_edges_per_position(mat_all: np.ndarray, nodes_vals: np.ndarray, e
     plt.tight_layout()
     out_norm = out_prefix + '_nodes_edges_normalized.png'
     if save:
-        plt.savefig(out_norm)
-        print(f'Saved nodes/edges per-position normalized plot: {out_norm}')
-        # write data-embedded TeX file for nodes/edges normalized plot
-        write_tex_nodes_edges_data(out_norm.replace('.png', '.tex'), positions, nodes_sum, edges_sum, caption='Proportion of nodes vs edges across paths per position (stacked)', normalized=True)
+        if _should_write(out_norm):
+            plt.savefig(out_norm)
+            print(f'Saved nodes/edges per-position normalized plot: {out_norm}')
+            # write data-embedded TeX file for nodes/edges normalized plot
+            tex_path = out_norm.replace('.png', '.tex')
+            if _should_write(tex_path):
+                write_tex_nodes_edges_data(tex_path, positions, nodes_sum, edges_sum, caption='Proportion of nodes vs edges across paths per position (stacked)', normalized=True)
+        else:
+            print(f"Skipping existing nodes/edges normalized plot: {out_norm}")
     if show:
         plt.show()
     else:
@@ -702,8 +735,11 @@ def main():
             combined[name] = merged['count'].fillna(0).astype(int)
 
         combined_csv = py_out('Combined_Operations_counts.csv')
-        combined.to_csv(combined_csv, index=False)
-        print(f"Wrote combined counts CSV: {combined_csv}")
+        if _should_write(combined_csv):
+            combined.to_csv(combined_csv, index=False)
+            print(f"Wrote combined counts CSV: {combined_csv}")
+        else:
+            print(f"Skipping existing combined counts CSV: {combined_csv}")
 
         # plot overlay as stacked bar plot instead of lines
         op_cols = [k for k in combined.columns if k != 'position']
@@ -722,10 +758,15 @@ def main():
         plt.tight_layout()
         out_combined = py_out('Combined_Operations_counts.png')
         if args.save:
-            plt.savefig(out_combined)
-            print(f"Saved combined plot: {out_combined}")
-            # write data-embedded TeX file for combined plot
-            write_tex_stacked_from_df(out_combined.replace('.png', '.tex'), combined, 'position', op_cols, 'position', 'count', 'Combined operation counts per position (stacked)')
+            if _should_write(out_combined):
+                plt.savefig(out_combined)
+                print(f"Saved combined plot: {out_combined}")
+                # write data-embedded TeX file for combined plot
+                tex_path = out_combined.replace('.png', '.tex')
+                if _should_write(tex_path):
+                    write_tex_stacked_from_df(tex_path, combined, 'position', op_cols, 'position', 'count', 'Combined operation counts per position (stacked)')
+            else:
+                print(f"Skipping existing combined plot: {out_combined}")
         if args.show:
             plt.show()
         else:
@@ -734,8 +775,11 @@ def main():
         # Bucketed counts - absolute and normalized stacked plots
         bucketed_df = bucket_combined_counts_df(combined, n_buckets=args.buckets)
         bucketed_csv = py_out('Bucketed_Operations_counts.csv')
-        bucketed_df.to_csv(bucketed_csv, index=False)
-        print(f"Wrote bucketed counts CSV: {bucketed_csv}")
+        if _should_write(bucketed_csv):
+            bucketed_df.to_csv(bucketed_csv, index=False)
+            print(f"Wrote bucketed counts CSV: {bucketed_csv}")
+        else:
+            print(f"Skipping existing bucketed counts CSV: {bucketed_csv}")
 
         # absolute stacked
         plot_buckets_stacked(bucketed_df, py_out('Bucketed_Operations_counts_absolute.png'), normalize=False, save=args.save, show=args.show)
