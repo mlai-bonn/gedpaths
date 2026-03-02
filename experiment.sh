@@ -7,6 +7,7 @@ set -euo pipefail
 # Defaults
 DB_NAMES=("MUTAG") # possible datasets DHFR, Mutagenicity, NCI1, NCI109, PTC_FM, PTC_FR, PTC_MM, PTC_MR, NCI109
 DB_NAMES_SET="no"
+METHOD="F2"
 VENV_PATH="venv"
 RECOMPILE="no"
 RECOMPILE_THREADS=""
@@ -21,6 +22,7 @@ Usage: $0 [options]
 Options:
   -db <dataset>        Dataset name(s) (default: ${DB_NAME}). Accepts comma-separated
                        lists and can be repeated, e.g. -db MUTAG,ENZYMES -db PROTEINS.
+  -method <method>     Method name to use (default: ${METHOD})
   -env <venv_path>     Path to virtual environment (default: ${VENV_PATH})
   -recompile [threads] Recompile the C++ code (optional threads). If threads omitted, defaults to half of available CPUs.
   -only_evaluation     Only run evaluation/analysis (don't compute mappings or paths)
@@ -59,6 +61,15 @@ while [[ $# -gt 0 ]]; do
       VENV_PATH="$2"
       shift 2
       ;;
+    -method|--method)
+      if [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
+        echo "Error: -method requires an argument"
+        usage
+        exit 1
+      fi
+      METHOD="$2"
+      shift 2
+      ;;
     -recompile|--recompile)
       RECOMPILE="recompile"
       # optional numeric argument: number of threads
@@ -94,6 +105,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Using datasets: ${DB_NAMES[*]}"
+echo "Using method: ${METHOD}"
 echo "Using virtual environment path: ${VENV_PATH}"
 
 # Create or activate virtual environment
@@ -174,7 +186,7 @@ for DB_NAME in "${DB_NAMES[@]}"; do
   else
     if [[ -x "build/CreateMappings" ]]; then
       cd build || exit 1
-      ./CreateMappings -db "${DB_NAME}" -num_pairs 5000 -method F2 -t 16 -method_options time-limit 60
+      ./CreateMappings -db "${DB_NAME}" -num_pairs 5000 -method "${METHOD}" -t 30 -method_options time-limit 180
       cd .. || exit 1
     else
       echo "Error: build/CreateMappings not found or not executable. Did the build succeed?"
@@ -189,7 +201,7 @@ for DB_NAME in "${DB_NAMES[@]}"; do
     if [[ -x "build/AnalyzeMappings" ]]; then
       echo "Analyzing mappings..."
       cd build || exit 1
-      ./AnalyzeMappings -db "${DB_NAME}" -method F2
+      ./AnalyzeMappings -db "${DB_NAME}" -method "${METHOD}"
       cd .. || exit 1
     else
       echo "Error: build/AnalyzeMappings not found or not executable. Did the build succeed?"
@@ -209,16 +221,16 @@ for DB_NAME in "${DB_NAMES[@]}"; do
       for STRATEGY in "${PATH_STRATEGIES[@]}"; do
         case "${STRATEGY}" in
           Rnd)
-            ./CreatePaths -db "${DB_NAME}" -method F2 -path_strategy Random
+            ./CreatePaths -db "${DB_NAME}" -method "${METHOD}" -path_strategy Random
             ;;
           Rnd_d-IsoN)
-            ./CreatePaths -db "${DB_NAME}" -method F2 -path_strategy Random DeleteIsolatedNodes
+            ./CreatePaths -db "${DB_NAME}" -method "${METHOD}" -path_strategy Random DeleteIsolatedNodes
             ;;
           i-E_d-IsoN)
-            ./CreatePaths -db "${DB_NAME}" -method F2 -path_strategy InsertEdges DeleteIsolatedNodes
+            ./CreatePaths -db "${DB_NAME}" -method "${METHOD}" -path_strategy InsertEdges DeleteIsolatedNodes
             ;;
           d-E_d-IsoN)
-            ./CreatePaths -db "${DB_NAME}" -method F2 -path_strategy DeleteEdges DeleteIsolatedNodes
+            ./CreatePaths -db "${DB_NAME}" -method "${METHOD}" -path_strategy DeleteEdges DeleteIsolatedNodes
             ;;
           *)
             echo "Error: unknown path strategy ${STRATEGY}"
@@ -241,7 +253,7 @@ for DB_NAME in "${DB_NAMES[@]}"; do
       echo "Analyzing path graphs..."
       cd build || exit 1
       for STRATEGY in "${PATH_STRATEGIES[@]}"; do
-        ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy "${STRATEGY}"
+        ./AnalyzePaths -db "${DB_NAME}" -method "${METHOD}" -path_strategy "${STRATEGY}"
       done
       cd .. || exit 1
     else
@@ -257,13 +269,13 @@ for DB_NAME in "${DB_NAMES[@]}"; do
   # convert the generated path graphs to pytorch-geometric format
   echo "Converting path graphs to pytorch-geometric format..."
   for STRATEGY in "${PATH_STRATEGIES[@]}"; do
-    python python_src/converter/bgf_to_pt.py --db "${DB_NAME}" --method F2 --path_strategy "${STRATEGY}"
+    python python_src/converter/bgf_to_pt.py --db "${DB_NAME}" --method "${METHOD}" --path_strategy "${STRATEGY}"
   done
 
   # plot the statistics with python
   echo "Plotting statistics..."
   for STRATEGY in "${PATH_STRATEGIES[@]}"; do
-    python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method F2 --path_strategy "${STRATEGY}"
+    python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method "${METHOD}" --path_strategy "${STRATEGY}"
   done
 
   # do wl analysis of the dataset graphs
@@ -273,9 +285,9 @@ for DB_NAME in "${DB_NAMES[@]}"; do
   done
 
   # plot a an example edit path
-  echo "Plotting example edit paths..."
-  for STRATEGY in "${PATH_STRATEGIES[@]}"; do
-    python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy "${STRATEGY}" --start 3 --end 77
-  done
+  #echo "Plotting example edit paths..."
+  #for STRATEGY in "${PATH_STRATEGIES[@]}"; do
+  #  python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method "${METHOD}" --path_strategy "${STRATEGY}" --start 3 --end 77
+  #done
 
 done

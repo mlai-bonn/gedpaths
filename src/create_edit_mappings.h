@@ -393,10 +393,9 @@ inline int create_edit_mappings(const std::string& db,
 
     INDEX total_computed_pairs = 0;
     bool should_stop = false;
-    const INDEX num_chunks = chunks.size();
 
     // Compute GED results for each chunk in parallel
-    #pragma omp parallel num_threads(num_threads) shared(graphs, edit_cost, ged_method, method_options, base_tmp, total_computed_pairs, num_pairs_to_compute, chunks, should_stop, num_chunks) default(none)
+    #pragma omp parallel num_threads(num_threads) shared(graphs, edit_cost, ged_method, method_options, base_tmp, total_computed_pairs, num_pairs_to_compute, chunks, should_stop) default(none)
     {
         // Each thread creates its own GED environment ONCE
         auto ged_env = ged::GEDEnv<ged::LabelID, ged::LabelID, ged::LabelID>();
@@ -404,11 +403,10 @@ inline int create_edit_mappings(const std::string& db,
 
         // Use omp for to distribute chunks across threads
         #pragma omp for schedule(dynamic)
-        for (INDEX chunk_idx = 0; chunk_idx < num_chunks; ++chunk_idx) {
+        for (const auto & chunk : chunks) {
             // Early exit check: skip remaining work if we have enough pairs
             if (should_stop) continue;
 
-            const auto& chunk = chunks[chunk_idx];
             size_t computed_pairs = ComputeGEDResults(ged_env, graphs, chunk, base_tmp.string(), ged_method, method_options);
 
             #pragma omp atomic
@@ -429,7 +427,6 @@ inline int create_edit_mappings(const std::string& db,
     BinaryToGEDResult(path, graphs, results);
     // Fix invalid mappings that are still present (due to parallel execution issues in gedlib)
     fixInvalidMappings(results, graphs, edit_cost, ged_method, method_options);
-
     save_final_results(results, random_pair_order, output_path, db, num_pairs);
 
 

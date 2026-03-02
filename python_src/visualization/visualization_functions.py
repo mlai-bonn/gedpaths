@@ -206,8 +206,10 @@ def graph_to_networkx_with_edge_features(data, one_hot_encoding: bool = True):
     try:
         # data.edge_index expected shape [2, num_edges]
         ei = data.edge_index
-        # prefer edge_attributes, else edge_attr
-        if hasattr(data, 'edge_attributes'):
+        # prefer primary_edge_labels if available, otherwise fall back to edge_attributes or edge_attr
+        if hasattr(data, 'primary_edge_labels'):
+            eattr = data.primary_edge_labels
+        elif hasattr(data, 'edge_attributes'):
             eattr = data.edge_attributes
         elif hasattr(data, 'edge_attr'):
             eattr = data.edge_attr
