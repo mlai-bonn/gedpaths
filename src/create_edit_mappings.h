@@ -215,6 +215,42 @@ inline void fix_invalid_mappings(const std::string& output_path,
     GEDResultToBinary(output_path + "/" + db + "/", results);
 }
 
+inline int save_final_results(const std::vector<GEDEvaluation<UDataGraph>>& results,
+                              const std::vector<std::pair<INDEX, INDEX>>& random_pair_order,
+                              const std::string& output_path,
+                              const std::string& db,
+                              int num_pairs) {
+    std::vector<GEDEvaluation<UDataGraph>> final_results;
+    // use only the first valid num_pairs from results (according to the random order)
+    // create a map from result pair ids to result index for O(1) lookup
+    std::unordered_map<std::pair<INDEX, INDEX>, INDEX, PairHash> result_pair_to_index;
+    for (auto i = 0; i < results.size(); ++i) {
+        result_pair_to_index[results[i].graph_ids] = i;
+    }
+    int final_counter = 0;
+    while (final_results.size() < num_pairs && final_counter < static_cast<int>(random_pair_order.size())) {
+        const auto& pair = random_pair_order[final_counter];
+        auto it = result_pair_to_index.find(pair);
+        if (it != result_pair_to_index.end()) {
+            auto & res = results[it->second];
+            if (results[it->second].time != -1) {
+                final_results.emplace_back(results[it->second]);
+            }
+        }
+        ++final_counter;
+    }
+
+    if (final_results.size() < static_cast<size_t>(num_pairs)) {
+        std::cout << "Warning: only " << final_results.size() << " GED mappings found for requested "
+                  << num_pairs << " pairs." << std::endl;
+    }
+
+    // save the updated results back to binary
+    GEDResultToBinary(output_path + "/" + db + "/", final_results);
+    CSVFromGEDResults(output_path + db + "/" + db + "_ged_mapping.csv", final_results);
+    return 0;
+}
+
 inline int create_edit_mappings(const std::string& db,
                                 const std::string& output_path,
                                 const std::string& input_path,
@@ -332,6 +368,7 @@ inline int create_edit_mappings(const std::string& db,
     }
     if (num_pairs < valid_computed_pairs.size()) {
         std::cout << "The number of pairs to compute is smaller than the number of already computed valid pairs. Exiting." << std::endl;
+        save_final_results(results, random_pair_order, output_path, db, num_pairs);
         return 0;
     }
     size_t num_pairs_to_compute = num_pairs - valid_computed_pairs.size();
@@ -392,34 +429,15 @@ inline int create_edit_mappings(const std::string& db,
     BinaryToGEDResult(path, graphs, results);
     // Fix invalid mappings that are still present (due to parallel execution issues in gedlib)
     fixInvalidMappings(results, graphs, edit_cost, ged_method, method_options);
-    std::vector<GEDEvaluation<UDataGraph>> final_results;
-    // use only the first valid num_pairs from results (according to the random order)
-    // create a map from result pair ids to result index for O(1) lookup
-    std::unordered_map<std::pair<INDEX, INDEX>, INDEX, PairHash> result_pair_to_index;
-    for (auto i = 0; i < results.size(); ++i) {
-        result_pair_to_index[results[i].graph_ids] = i;
-    }
-    int final_counter = 0;
-    while (final_results.size() < num_pairs && final_counter < static_cast<int>(random_pair_order.size())) {
-        const auto& pair = random_pair_order[final_counter];
-        auto it = result_pair_to_index.find(pair);
-        if (it != result_pair_to_index.end()) {
-            final_results.emplace_back(results[it->second]);
-        }
-        ++final_counter;
-    }
 
-    if (final_results.size() < static_cast<size_t>(num_pairs)) {
-        std::cout << "Warning: only " << final_results.size() << " GED mappings found for requested "
-                  << num_pairs << " pairs." << std::endl;
-    }
+    save_final_results(results, random_pair_order, output_path, db, num_pairs);
 
-    // save the updated results back to binary
-    GEDResultToBinary(output_path + "/" + db + "/", final_results);
-    CSVFromGEDResults(output_path + db + "/" + db + "_ged_mapping.csv", final_results);
+
 
     return 0;
 }
+
+
 
 #endif //GEDPATHS_CREATE_EDIT_MAPPINGS_H
 
