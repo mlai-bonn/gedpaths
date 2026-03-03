@@ -75,8 +75,9 @@ def main():
     # named edit_path_{start}_{end}_step_{i}.png
     if args.save:
         for i, g in enumerate(path_graphs):
-            # corresponding op if available
-            op = edit_operations[i] if i < len(edit_operations) else None
+            # For per-step exports, align markers with post-change semantics:
+            # graph at step i was produced by operation i-1 (step 0 is source).
+            op = edit_operations[i - 1] if i > 0 and (i - 1) < len(edit_operations) else None
             # Provide a filename prefix WITHOUT the '_step' suffix; the plotting
             single_out_prefix = os.path.join(output_path, f"edit_path_{start}_{end}_step_{i}")
             # plot single-step graph and save to file (plot_edit_path will add the step index)

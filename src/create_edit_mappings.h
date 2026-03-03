@@ -233,7 +233,7 @@ inline int save_final_results(const std::vector<GEDEvaluation<UDataGraph>>& resu
         auto it = result_pair_to_index.find(pair);
         if (it != result_pair_to_index.end()) {
             auto & res = results[it->second];
-            if (results[it->second].time != -1) {
+            if (results[it->second].valid) {
                 final_results.emplace_back(results[it->second]);
             }
         }
@@ -357,7 +357,7 @@ inline int create_edit_mappings(const std::string& db,
             else {
                 // check if the existing pair is valid or not using the index in existing_pairs to find the corresponding result in results and check its time
                 size_t index = std::distance(existing_pairs.begin(), find_id);
-                if (results[index].time == -1) {
+                if (results[index].time == -1 ) {
                     invalid_computed_pairs.emplace_back(pair);
                 }
                 else {
@@ -426,7 +426,7 @@ inline int create_edit_mappings(const std::string& db,
     const std::string path = output_path + db + "/" + db + "_ged_mapping.bin";
     BinaryToGEDResult(path, graphs, results);
     // Fix invalid mappings that are still present (due to parallel execution issues in gedlib)
-    fixInvalidMappings(results, graphs, edit_cost, ged_method, method_options);
+    //fixInvalidMappings(results, graphs, edit_cost, ged_method, method_options);
     save_final_results(results, random_pair_order, output_path, db, num_pairs);
 
 

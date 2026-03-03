@@ -696,6 +696,62 @@ def plot_edit_path(graphs, edit_ops, output=None, show_labels=True, one_fig_per_
         else:
             return 'Initial'
 
+    def _op_for_graph_step(step_idx):
+        """Map graph step index to the operation that produced that graph.
+
+        Step 0 is the source graph (no operation applied yet), step i>=1 was
+        produced by operation i-1.
+        """
+        # Compatibility for single-graph calls used by per-step exports:
+        # when the caller passes one graph and one op, that op applies to
+        # the shown graph directly.
+        if n_steps == 1:
+            if step_idx == 0 and len(edit_ops) > 0:
+                return edit_ops[0]
+            return None
+        if step_idx <= 0:
+            return None
+        op_idx = step_idx - 1
+        if op_idx < len(edit_ops):
+            return edit_ops[op_idx]
+        return None
+
+    def _extract_highlight_targets(parsed_op):
+        """Return highlight targets derived from a parsed op.
+
+        Rules:
+        - relabeled node/edge -> black
+        - inserted edge endpoints -> green
+        - deleted edge endpoints -> red
+        """
+        typ = str(parsed_op.get('type', 'none')).lower()
+        nodes = set(parsed_op.get('nodes', set()))
+        edges = set(parsed_op.get('edges', set()))
+
+        relabel_nodes = set()
+        relabel_edges = set()
+        insert_edge_endpoints = set()
+        delete_edge_endpoints = set()
+
+        if any(k in typ for k in ('sub', 'relabel', 'replace', 'subst')):
+            relabel_nodes |= nodes
+            relabel_edges |= edges
+        elif any(k in typ for k in ('insert', 'add', 'create')):
+            for u, v in edges:
+                insert_edge_endpoints.add(int(u))
+                insert_edge_endpoints.add(int(v))
+        elif any(k in typ for k in ('delete', 'del', 'remove')):
+            for u, v in edges:
+                delete_edge_endpoints.add(int(u))
+                delete_edge_endpoints.add(int(v))
+
+        normalized_relabel_edges = set()
+        for u, v in relabel_edges:
+            normalized_relabel_edges.add((u, v))
+            normalized_relabel_edges.add((v, u))
+
+        return relabel_nodes, normalized_relabel_edges, insert_edge_endpoints, delete_edge_endpoints
+
     # small helper that draws a single graph on the provided Axes and applies highlights
     # accepts an optional `color_mapping` which is either ('numeric', bins, palette) or ('categorical', mapping_dict, palette)
     # pos_override: if provided, use this layout dict instead of computing a new one
@@ -735,14 +791,7 @@ def plot_edit_path(graphs, edit_ops, output=None, show_labels=True, one_fig_per_
 
         # compute highlight sets from op
         parsed = _parse_edit_op(op)
-        op_type = parsed.get('type', 'none')
-        highlight_node_set = parsed.get('nodes', set())
-        highlight_edge_set = parsed.get('edges', set())
-        # normalize edge direction: networkx undirected edges may be (u,v) or (v,u)
-        normalized_edge_set = set()
-        for u, v in highlight_edge_set:
-            normalized_edge_set.add((u, v))
-            normalized_edge_set.add((v, u))
+        relabel_nodes, relabel_edges, insert_edge_endpoints, delete_edge_endpoints = _extract_highlight_targets(parsed)
 
         # draw on the provided axis: draw defaults first, then overlay highlighted nodes/edges
         ax.clear()
@@ -750,30 +799,22 @@ def plot_edit_path(graphs, edit_ops, output=None, show_labels=True, one_fig_per_
 
 
         # draw network nodes borders for operations (nodes with bigger sizes)
-        hex_white = mpl.colors.to_hex(mpl.colors.to_rgb('black'))
-        border_colors = [hex_white for _ in G.nodes()]
+        node_order = list(G.nodes())
+        border_colors = [mpl.colors.to_hex(mpl.colors.to_rgb('black')) for _ in node_order]
         border_factor = 4
-        node_sizes = [standard_node_size for _ in G.nodes()]
-        if op is not None:
-            if op_type in ('DELETE', 'node_delete', 'Delete'):
-                if parsed.get('nodes'):
-                    n = list(parsed.get('nodes'))[0]
-                    border_colors[n] = mpl.colors.to_hex(mpl.colors.to_rgb('red'))
-                    node_sizes[n] = int(border_factor * standard_node_size)
-            elif op_type in ('RELABEL', 'node_subst', 'Relabel'):
-                if parsed.get('nodes'):
-                    n = list(parsed.get('nodes'))[0]
-                    border_colors[n] = mpl.colors.to_hex(mpl.colors.to_rgb('black'))
-                    node_sizes[n] = border_factor * standard_node_size
-            elif op_type in ('INSERT', 'node_insert', 'Insert'):
-                if parsed.get('edges'):
-                    source, target = list(parsed.get('edges'))[0]
-                    border_colors[source] = mpl.colors.to_hex(mpl.colors.to_rgb('green'))
-                    node_sizes[source] = border_factor * standard_node_size
-                    border_colors[target] = mpl.colors.to_hex(mpl.colors.to_rgb('green'))
-                    node_sizes[target] = border_factor * standard_node_size
+        node_sizes = [standard_node_size for _ in node_order]
+        for idx, n in enumerate(node_order):
+            if n in delete_edge_endpoints:
+                border_colors[idx] = mpl.colors.to_hex(mpl.colors.to_rgb('red'))
+                node_sizes[idx] = int(border_factor * standard_node_size)
+            elif n in insert_edge_endpoints:
+                border_colors[idx] = mpl.colors.to_hex(mpl.colors.to_rgb('green'))
+                node_sizes[idx] = int(border_factor * standard_node_size)
+            elif n in relabel_nodes:
+                border_colors[idx] = mpl.colors.to_hex(mpl.colors.to_rgb('black'))
+                node_sizes[idx] = int(border_factor * standard_node_size)
 
-        nx.draw_networkx_nodes(G, pos, node_color=border_colors, node_size=node_sizes, ax=ax)
+        nx.draw_networkx_nodes(G, pos, nodelist=node_order, node_color=border_colors, node_size=node_sizes, ax=ax)
 
         # draw nodes colored by label if requested
         if color_nodes_by_label and node_labels is not None:
@@ -843,18 +884,20 @@ def plot_edit_path(graphs, edit_ops, output=None, show_labels=True, one_fig_per_
 
         # prepare palette for tab20
         palette = TAB20_PALETTE
-        edge_widths = [1 for _ in G.edges()]
-        edge_colors = [mpl.colors.to_hex(mpl.colors.to_rgb('lightgray')) for _ in G.edges()]
-        # double edge width for if type is DELETE or relabel
-        if parsed and parsed['edges']:
-            for i, (u, v) in enumerate(G.edges()):
-                if (u, v) in normalized_edge_set:
-                    edge_widths[i] = 2 * standard_edge_width
-                    edge_colors[i] = mpl.colors.to_hex(mpl.colors.to_rgb('red'))
-        nx.draw_networkx_edges(G, pos, width=edge_widths, edge_color=edge_colors, ax=ax)
-        # draw edge colors/labels using helper (colors and optional labels)
+        # draw regular edge colors/labels first, then overlay relabeled edges in black
         if edge_labels:
             _draw_colored_edges(G, pos, edge_labels, ax, palette, edge_width=standard_edge_width, show_text_bbox=show_text_bbox)
+        if relabel_edges:
+            relabel_edge_list = [(u, v) for (u, v) in G.edges() if (u, v) in relabel_edges]
+            if relabel_edge_list:
+                nx.draw_networkx_edges(
+                    G,
+                    pos,
+                    edgelist=relabel_edge_list,
+                    width=2 * standard_edge_width,
+                    edge_color=mpl.colors.to_hex(mpl.colors.to_rgb('black')),
+                    ax=ax
+                )
 
         # draw labels: inside labels (bold black) show node attributes; outside ids (bold red) show node indices
         if node_labels is not None and (not color_nodes_by_label):
@@ -870,7 +913,23 @@ def plot_edit_path(graphs, edit_ops, output=None, show_labels=True, one_fig_per_
             off = 0.05 * max(dx, dy, 1.0)
             pos_ids = {n: (pos[n][0] + off, pos[n][1] + off) for n in G.nodes()}
             id_labels = {n: str(n) for n in G.nodes()}
-            nx.draw_networkx_labels(G, pos_ids, labels=id_labels, font_size=red_font_size, font_color='red', font_weight='bold', ax=ax)
+            nx.draw_networkx_labels(
+                G,
+                pos_ids,
+                labels=id_labels,
+                font_size=red_font_size,
+                font_color='red',
+                font_weight='bold',
+                ax=ax,
+                clip_on=False,
+            )
+        except Exception:
+            pass
+
+        # Keep a small padding around graph extents so outside-offset id labels
+        # remain inside saved figure bounds when tight layout/bbox is used.
+        try:
+            ax.margins(x=0.12, y=0.12)
         except Exception:
             pass
 
@@ -1012,7 +1071,7 @@ def plot_edit_path(graphs, edit_ops, output=None, show_labels=True, one_fig_per_
             data = graphs[step]
             G_step, _ = graph_to_networkx_with_edge_features(data)
 
-            op = edit_ops[step] if step < len(edit_ops) else None
+            op = _op_for_graph_step(step)
             title = None
             if step > 0:
                 title = f"Step {step}" + f": {edit_ops[step-1]}"
@@ -1135,7 +1194,7 @@ def plot_edit_path(graphs, edit_ops, output=None, show_labels=True, one_fig_per_
                 ax = ax_list[i]
                 data = graphs[i]
                 G_i, _ = graph_to_networkx_with_edge_features(data)
-                op = edit_ops[i] if i < len(edit_ops) else None
+                op = _op_for_graph_step(i)
                 title = None if i < len(edit_ops) else f"Target Graph"
 
                 # derive positions for this subplot, reusing prev_pos where possible
@@ -1217,7 +1276,7 @@ def plot_edit_path(graphs, edit_ops, output=None, show_labels=True, one_fig_per_
                     if i < n_steps:
                         ax_t = ax_title_list[i]
                         data = graphs[i]
-                        op = edit_ops[i] if i < len(edit_ops) else None
+                        op = _op_for_graph_step(i)
                         _draw_graph_on_ax(data, ax_t, title=None, show_node_labels=show_labels, op=op, show_node_ids_outside=True, color_nodes_by_label=color_nodes_by_label, color_mapping=global_color_mapping, show_title=True)
                     else:
                         try:
@@ -1264,4 +1323,3 @@ def plot_edit_path(graphs, edit_ops, output=None, show_labels=True, one_fig_per_
             plt.close(fig)
         else:
             plt.show()
-
