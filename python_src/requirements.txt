@@ -9,7 +9,9 @@ pandas~=2.3.3
 # Matplotlib
 matplotlib~=3.10.3
 # OGB for loading the OGB benchmark datasets
-#ogb~=1.3.6
+ogb~=1.3.6
+# Google Drive folder/file downloads (GED mirror fallback)
+gdown~=5.2.0
 # Click for command line interface
 click~=8.2.1
 # RdKit for molecular graph processing

@@ -215,42 +215,6 @@ inline void fix_invalid_mappings(const std::string& output_path,
     GEDResultToBinary(output_path + "/" + db + "/", results);
 }
 
-inline int save_final_results(const std::vector<GEDEvaluation<UDataGraph>>& results,
-                              const std::vector<std::pair<INDEX, INDEX>>& random_pair_order,
-                              const std::string& output_path,
-                              const std::string& db,
-                              int num_pairs) {
-    std::vector<GEDEvaluation<UDataGraph>> final_results;
-    // use only the first valid num_pairs from results (according to the random order)
-    // create a map from result pair ids to result index for O(1) lookup
-    std::unordered_map<std::pair<INDEX, INDEX>, INDEX, PairHash> result_pair_to_index;
-    for (auto i = 0; i < results.size(); ++i) {
-        result_pair_to_index[results[i].graph_ids] = i;
-    }
-    int final_counter = 0;
-    while (final_results.size() < num_pairs && final_counter < static_cast<int>(random_pair_order.size())) {
-        const auto& pair = random_pair_order[final_counter];
-        auto it = result_pair_to_index.find(pair);
-        if (it != result_pair_to_index.end()) {
-            auto & res = results[it->second];
-            if (results[it->second].valid) {
-                final_results.emplace_back(results[it->second]);
-            }
-        }
-        ++final_counter;
-    }
-
-    if (final_results.size() < static_cast<size_t>(num_pairs)) {
-        std::cout << "Warning: only " << final_results.size() << " GED mappings found for requested "
-                  << num_pairs << " pairs." << std::endl;
-    }
-
-    // save the updated results back to binary
-    GEDResultToBinary(output_path + "/" + db + "/", final_results);
-    CSVFromGEDResults(output_path + db + "/" + db + "_ged_mapping.csv", final_results);
-    return 0;
-}
-
 inline int create_edit_mappings(const std::string& db,
                                 const std::string& output_path,
                                 const std::string& input_path,
@@ -297,9 +261,9 @@ inline int create_edit_mappings(const std::string& db,
 
 
     // Fix invalid mappings that are still present (due to parallel execution issues in gedlib)
-    fixInvalidMappings(results, graphs, edit_cost, ged_method, method_options);
+    //fixInvalidMappings(results, graphs, edit_cost, ged_method, method_options);
     // save the updated results back to binary
-    GEDResultToBinary(output_path + "/" + db + "/", results);
+    //GEDResultToBinary(output_path + "/" + db + "/", results);
 
     // If single_source and single_target are set, only compute and print that mapping
     if (single_source >= 0 && single_target >= 0) {
@@ -357,7 +321,7 @@ inline int create_edit_mappings(const std::string& db,
             else {
                 // check if the existing pair is valid or not using the index in existing_pairs to find the corresponding result in results and check its time
                 size_t index = std::distance(existing_pairs.begin(), find_id);
-                if (results[index].time == -1 ) {
+                if (results[index].valid == false ) {
                     invalid_computed_pairs.emplace_back(pair);
                 }
                 else {
@@ -366,25 +330,28 @@ inline int create_edit_mappings(const std::string& db,
             }
         }
     }
+
+
+
     if (num_pairs < valid_computed_pairs.size()) {
         std::cout << "The number of pairs to compute is smaller than the number of already computed valid pairs. Exiting." << std::endl;
-        save_final_results(results, random_pair_order, output_path, db, num_pairs);
         return 0;
     }
     size_t num_pairs_to_compute = num_pairs - valid_computed_pairs.size();
-    // std::cout number of pairs to compute
-    std::cout << "Number of GED mappings to compute: " << num_pairs_to_compute << std::endl;
+    // Print how many pairs are computed, how many of them are invalid and how many need to be computed
+    std::cout << "Found " << valid_computed_pairs.size() + invalid_computed_pairs.size() << " existing mappings, of which " << valid_computed_pairs.size() << " are valid and " << invalid_computed_pairs.size() << " are invalid." << std::endl;
     if (num_pairs_to_compute == 0) {
         std::cout << "All requested GED mappings already exist. Exiting." << std::endl;
         return 0;
     }
+    std::cout << "Number of pairs to compute: " << num_pairs_to_compute << std::endl;
 
     // Ensure base tmp directory exists
     std::filesystem::path base_tmp = output_path + db + "/tmp/";
     std::filesystem::create_directories(base_tmp);
 
     // Chunk the pairs into batches of size 10 to allow for better parallelization
-    INDEX chunk_size = 10;
+    INDEX chunk_size = 1;
     std::vector<std::vector<std::pair<INDEX, INDEX>>> chunks;
     for (INDEX i = 0; i < pairs_to_compute_candidates.size(); i += chunk_size) {
         std::vector<std::pair<INDEX, INDEX>> chunk(pairs_to_compute_candidates.begin() + i, pairs_to_compute_candidates.begin() + std::min(i + chunk_size, pairs_to_compute_candidates.size()));
@@ -427,7 +394,9 @@ inline int create_edit_mappings(const std::string& db,
     BinaryToGEDResult(path, graphs, results);
     // Fix invalid mappings that are still present (due to parallel execution issues in gedlib)
     //fixInvalidMappings(results, graphs, edit_cost, ged_method, method_options);
-    save_final_results(results, random_pair_order, output_path, db, num_pairs);
+    GEDResultToBinary(output_path + "/" + db + "/", results);
+    CSVFromGEDResults(output_path + db + "/" + db + "_ged_mapping.csv", results);
+    //save_final_results(results, random_pair_order, output_path, db, num_pairs);
 
 
 
