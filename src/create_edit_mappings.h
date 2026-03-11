@@ -255,6 +255,15 @@ inline int create_edit_mappings(const std::string& db,
     auto results = std::vector<GEDEvaluation<UDataGraph>>{};
     // Load existing mappings if they exist and add their graph ids to existing_pairs
     get_existing_mappings(output_path, db, graphs, existing_pairs, results);
+    for (auto& result : results) {
+        if (CheckResultValidity(result, ged_method)) {
+            result.valid = true;
+        }
+        else {
+            result.valid = false;
+        }
+    }
+    GEDResultToBinary(output_path + "/" + db + "/", results);
 
 
 
@@ -334,7 +343,9 @@ inline int create_edit_mappings(const std::string& db,
 
 
     if (num_pairs < valid_computed_pairs.size()) {
-        std::cout << "The number of pairs to compute is smaller than the number of already computed valid pairs. Exiting." << std::endl;
+        std::cout << "The number of pairs to compute is " << num_pairs << ", which is " <<
+                     "smaller than the number of already computed valid pairs " << valid_computed_pairs.size() <<
+                     ". Exiting." << std::endl;
         return 0;
     }
     size_t num_pairs_to_compute = num_pairs - valid_computed_pairs.size();

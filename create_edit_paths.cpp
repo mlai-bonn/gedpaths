@@ -19,7 +19,7 @@ int main(int argc, const char * argv[]) {
     // -mappings argument for loading the mappings
     std::string mappings_path = "../Results/Mappings/";
     // -num_mappings argument for the number of valid mappings to create edit paths for
-    int num_mappings = -1;
+    int num_mappings = 5000;
     // -seed argument for the random seed
     int seed = 42;
     // -edit_paths argument for the path to store the edit paths

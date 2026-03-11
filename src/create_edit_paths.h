@@ -40,13 +40,7 @@ inline int create_edit_paths( const std::string& db,
         std::filesystem::create_directories(edit_path_output_db);
     }
 
-    // Check whether the paths have been computed
-    if (std::filesystem::exists(edit_path_output_db + db + "_edit_paths.bgf")) {
-        std::cout << "Edit paths for " << db << " already exist at " << edit_path_output_db + db + "_edit_paths.bgf" << std::endl;
-        // Mention that one have to check if the paths are all that one wanted to compute
-        std::cout << "Check if the paths are those you want to use!" << std::endl;
-        return 0;
-    }
+
 
     GraphData<UDataGraph> graphs;
     LoadSaveGraphDatasets::LoadPreprocessedGraphData(db, processed_graph_path, graphs);
@@ -55,26 +49,34 @@ inline int create_edit_paths( const std::string& db,
     // load mappings
     std::vector<GEDEvaluation<UDataGraph>> results;
     BinaryToGEDResult(mappings_path + db + "_ged_mapping.bin", graphs, results);
-    // Check validity and collect invalid result ids
-    auto invalids = CheckResultsValidity(results);
-    if (!invalids.empty()) {
-        std::cerr << "Warning: Found invalid mappings for the following result ids (these will be skipped):\n";
-        for (const auto &id : invalids) {
-            std::cerr << "  " << id << ": " << "Graph IDs (" << results[id].graph_ids.first << ", " << results[id].graph_ids.second << ")\n";
+
+    // get only the valid results
+    std::vector<GEDEvaluation<UDataGraph>> valid_results;
+    std::vector<int> valids;
+    for (size_t i = 0; i < results.size(); ++i) {
+        if (results[i].valid) {
+            valids.push_back(static_cast<int>(i));
+            valid_results.push_back(std::move(results[i]));
         }
     }
-    else {
-        std::cout << "All loaded mappings are valid.\n";
+    // print number of invalid and valid results
+    std::cout << "Found " << results.size() - valids.size() << " invalid mappings and " << valids.size() << " valid mappings." << std::endl;
+    // print percentage of invalid
+    std::cout << "Percentage of invalid mappings: " << (results.size() - valids.size()) * 100.0 / results.size() << "%\n";
+
+    // Check whether the paths have been computed
+    if (std::filesystem::exists(edit_path_output_db + db + "_edit_paths.bgf")) {
+        std::cout << "Edit paths for " << db << " already exist at " << edit_path_output_db + db + "_edit_paths.bgf" << std::endl;
+        // Mention that one have to check if the paths are all that one wanted to compute
+        std::cout << "Check if the paths are those you want to use!" << std::endl;
+        return 0;
     }
 
-
-    // Filter out invalid results - use hash set for O(1) lookup instead of linear search
-    std::unordered_set<int> invalid_set(invalids.begin(), invalids.end());
     // Falls source_id und target_id gesetzt sind, nur das entsprechende Mapping verwenden
     if (source_id >= 0 && target_id >= 0) {
         std::cout << "Creating edit path for specific graph IDs: " << source_id << " and " << target_id << ".\n";
         int found_index = -1;
-        for (size_t i = 0; i < results.size(); ++i) {
+        for (size_t i = 0; i < valids.size(); ++i) {
             const auto& eval = results[i];
             if ((eval.graph_ids.first == source_id && eval.graph_ids.second == target_id) ||
                 (eval.graph_ids.first == target_id && eval.graph_ids.second == source_id)) {
@@ -83,11 +85,7 @@ inline int create_edit_paths( const std::string& db,
             }
         }
         if (found_index < 0) {
-            std::cerr << "Kein Mapping für die angegebenen Graphen-IDs gefunden.\n";
-            return 1;
-        }
-        if (invalid_set.find(found_index) != invalid_set.end()) {
-            std::cerr << "Gefundenes Mapping ist ungültig und wird nicht verarbeitet.\n";
+            std::cerr << "Error: No valid mapping found for graph IDs " << source_id << " and " << target_id << ". Exiting.\n";
             return 1;
         }
         std::vector<GEDEvaluation<UDataGraph>> single_result;
@@ -95,28 +93,19 @@ inline int create_edit_paths( const std::string& db,
         single_result.push_back(std::move(results[found_index]));
         results.clear();
         results.shrink_to_fit();
-        std::cout << "Erzeuge Edit-Path nur für Mapping zwischen Graph " << source_id << " und " << target_id << ".\n";
+        std::cout << "Creating edit paths for graph IDs " << source_id << " and " << target_id << ".\n";
         CreateAllEditPaths(single_result, graphs,  edit_path_output_db, seed, connected_only, edit_path_strategies);
         return 0;
     }
 
-    const size_t total_results = results.size();
-    std::vector<GEDEvaluation<UDataGraph>> valid_results;
-    valid_results.reserve(results.size() - invalid_set.size());
-    for (size_t i = 0; i < results.size(); ++i) {
-        if (invalid_set.find(static_cast<int>(i)) == invalid_set.end()) {
-            valid_results.push_back(std::move(results[i]));
-        }
-    }
-    results.clear();
-    results.shrink_to_fit();
-    if (valid_results.empty()) {
+    if (valids.empty()) {
         std::cerr << "No valid results to process. Exiting.\n";
         return 1;
     }
-    std::cout << "Proceeding with " << valid_results.size() << " valid mappings out of " << total_results << " total mappings.\n";
 
-    if (num_mappings > 0 && num_mappings < static_cast<int>(valid_results.size())) {
+    std::cout << "Creating edit paths for " << valid_results.size() << " valid mappings out of " << results.size() << " total mappings.\n";
+
+    if (num_mappings > 0 && num_mappings < static_cast<int>(valids.size())) {
         // shuffle valid_results and take first num_mappings
         std::ranges::shuffle(valid_results, std::mt19937(seed));
         valid_results.resize(num_mappings);
@@ -130,7 +119,6 @@ inline int create_edit_paths( const std::string& db,
 
     }
     // print info about number of valid results considered
-    std::cout << "Creating edit paths for " << valid_results.size() << " valid mappings out of " << total_results << " total mappings.\n";
     CreateAllEditPaths(valid_results, graphs,  edit_path_output_db, seed, connected_only, edit_path_strategies);
 
     return 0;

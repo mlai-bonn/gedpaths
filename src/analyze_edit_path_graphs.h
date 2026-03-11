@@ -35,6 +35,9 @@ public:
     void PrintStatistics() const;
     [[nodiscard]] unsigned long GetCount() const { return _num_values; }
     [[nodiscard]] double GetAverage() const { return _average; }
+    [[nodiscard]] double GetStddev() const { return _stddev; }
+    [[nodiscard]] double GetMin() const { return _min; }
+    [[nodiscard]] double GetMax() const { return _max; }
 private:
     std::string _name;
     unsigned long _num_values = 0;
@@ -136,6 +139,24 @@ inline void WritePositionsCSVRow(std::ofstream& ofs, const std::vector<int>& row
     ofs << "\n";
 }
 
+inline std::string JsonEscape(std::string s) {
+    std::string out;
+    out.reserve(s.size());
+    for (const char c : s) {
+        switch (c) {
+            case '\"': out += "\\\""; break;
+            case '\\': out += "\\\\"; break;
+            case '\b': out += "\\b"; break;
+            case '\f': out += "\\f"; break;
+            case '\n': out += "\\n"; break;
+            case '\r': out += "\\r"; break;
+            case '\t': out += "\\t"; break;
+            default: out += c; break;
+        }
+    }
+    return out;
+}
+
 struct PathOperationCounts {
     unsigned long node_insertions = 0;
     unsigned long node_deletions = 0;
@@ -155,6 +176,10 @@ public:
     void PrintStatistics() const;
     void WriteCSVFiles(const std::string& output_dir) const;
     void WritePositionCSVFiles(const std::string& output_dir) const;
+    void WriteSummaryJson(const std::string& output_dir,
+                          const std::string& db,
+                          const std::string& method,
+                          bool low_memory) const;
     [[nodiscard]] unsigned long GetNumGraphs() const { return _num_graphs; }
     [[nodiscard]] double GetAveragePathLength() const { return _path_length_stats.GetAverage(); }
     [[nodiscard]] double GetAverageNodeInsertions() const { return _node_insertions_stats.GetAverage(); }
@@ -381,6 +406,62 @@ void EditPathStatistics::WritePositionCSVFiles(const std::string &output_dir) co
         operation_counter += 1;
     }
     flush_path();
+}
+
+void EditPathStatistics::WriteSummaryJson(const std::string& output_dir,
+                                          const std::string& db,
+                                          const std::string& method,
+                                          const bool low_memory) const {
+    EnsureDirectory(output_dir);
+    std::ostringstream path;
+    path << output_dir;
+    if (!output_dir.empty() && output_dir.back() != '/') path << '/';
+    path << "summary.json";
+
+    std::ofstream ofs(path.str());
+    if (!ofs.is_open()) {
+        std::cerr << "Failed to write summary JSON: " << path.str() << std::endl;
+        return;
+    }
+
+    const std::vector<std::pair<std::string, const ValueStatistics*>> base_metrics = {
+            {"Number of Operations", &_num_operations_stats},
+            {"Path Length", &_path_length_stats},
+            {"Node Insertions", &_node_insertions_stats},
+            {"Node Deletions", &_node_deletions_stats},
+            {"Node Relabels", &_node_relabels_stats},
+            {"Edge Insertions", &_edge_insertions_stats},
+            {"Edge Deletions", &_edge_deletions_stats},
+            {"Edge Relabels", &_edge_relabels_stats},
+    };
+
+    std::vector<std::pair<std::string, const ValueStatistics*>> metrics = base_metrics;
+    if (_include_graph_metrics) {
+        metrics.push_back({"Number of Nodes", &_num_nodes_stats});
+        metrics.push_back({"Number of Edges", &_num_edges_stats});
+        metrics.push_back({"Graphs Unconnected", &_connectedness_stats});
+    }
+
+    ofs << "{\n";
+    ofs << "  \"db\": \"" << JsonEscape(db) << "\",\n";
+    ofs << "  \"method\": \"" << JsonEscape(method) << "\",\n";
+    ofs << "  \"low_memory\": " << (low_memory ? "true" : "false") << ",\n";
+    ofs << "  \"include_graph_metrics\": " << (_include_graph_metrics ? "true" : "false") << ",\n";
+    ofs << "  \"metrics\": {\n";
+    for (size_t i = 0; i < metrics.size(); ++i) {
+        const auto& [name, stats] = metrics[i];
+        ofs << "    \"" << JsonEscape(name) << "\": {\n";
+        ofs << "      \"count\": " << stats->GetCount() << ",\n";
+        ofs << "      \"average\": " << std::setprecision(10) << stats->GetAverage() << ",\n";
+        ofs << "      \"stddev\": " << std::setprecision(10) << stats->GetStddev() << ",\n";
+        ofs << "      \"min\": " << std::setprecision(10) << stats->GetMin() << ",\n";
+        ofs << "      \"max\": " << std::setprecision(10) << stats->GetMax() << "\n";
+        ofs << "    }";
+        if (i + 1 < metrics.size()) ofs << ",";
+        ofs << "\n";
+    }
+    ofs << "  }\n";
+    ofs << "}\n";
 }
 
 void EditPathStatistics::AddOperation(const EditOperation& op, PathOperationCounts& counts) const {
@@ -671,6 +752,7 @@ inline int analyze_edit_path_graphs(const std::string& db,
     if (!std::filesystem::exists(eval_dir)) {
         std::filesystem::create_directories(eval_dir);
     }
+    stats.WriteSummaryJson(eval_dir, db, method, low_memory);
     stats.WriteCSVFiles(eval_dir);
     // Write per-path positions evaluation CSVs
     stats.WritePositionCSVFiles(eval_dir);
