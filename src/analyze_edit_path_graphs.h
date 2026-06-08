@@ -717,7 +717,8 @@ inline bool WriteTable2Tex(const std::filesystem::path& output_path,
 }
 
 
-inline int analyze_edit_path_graphs(const std::string& db,
+inline int
+analyze_edit_path_graphs(const std::string& db,
                                     const std::string& edit_path_output,
                                     const std::string& method,
                                     const bool low_memory = false) {

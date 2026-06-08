@@ -321,7 +321,7 @@ def bgf_to_pyg_data_list(
                         except Exception:
                             pass
 
-            d = Data(x=x, edge_index=edge_index, edge_attributes=edge_attr)
+            d = Data(x=x, edge_index=edge_index, edge_attr=edge_attr, edge_attributes=edge_attr)
             # add metadata fields
             d.y = -1
             d.bgf_name = h.name
@@ -330,7 +330,7 @@ def bgf_to_pyg_data_list(
             pel = raw_data['primary_edge_labels'][i]
             d.primary_node_labels = torch.from_numpy(pnl).type(torch.long) if pnl is not None else torch.Tensor()
             d.primary_edge_labels = torch.from_numpy(pel).type(torch.long) if pel is not None else torch.Tensor()
-            d.edge_attributes = torch.Tensor()
+            #d.edge_attributes = torch.Tensor()
             # add zero labels
             # split the name into start graph end graph and edit step
             bgf_name_parts = h.name.split("_")

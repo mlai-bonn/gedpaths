@@ -64,13 +64,9 @@ inline int create_edit_paths( const std::string& db,
     // print percentage of invalid
     std::cout << "Percentage of invalid mappings: " << (results.size() - valids.size()) * 100.0 / results.size() << "%\n";
 
-    // Check whether the paths have been computed
-    if (std::filesystem::exists(edit_path_output_db + db + "_edit_paths.bgf")) {
-        std::cout << "Edit paths for " << db << " already exist at " << edit_path_output_db + db + "_edit_paths.bgf" << std::endl;
-        // Mention that one have to check if the paths are all that one wanted to compute
-        std::cout << "Check if the paths are those you want to use!" << std::endl;
-        return 0;
-    }
+    // print the number of unique
+
+
 
     // Falls source_id und target_id gesetzt sind, nur das entsprechende Mapping verwenden
     if (source_id >= 0 && target_id >= 0) {
@@ -117,6 +113,21 @@ inline int create_edit_paths( const std::string& db,
             return a.graph_ids.second < b.graph_ids.second;
         });
 
+    }
+    // Print the number of unique endpoint graphs in valid_results and the percentage regarding the whole dataset
+    std::unordered_set<INDEX> unique_graph_ids;
+    for (const auto& result : valid_results) {
+        unique_graph_ids.insert(result.graph_ids.first);
+        unique_graph_ids.insert(result.graph_ids.second);
+    }
+    std::cout << "Number of unique endpoint graphs in valid results: " << unique_graph_ids.size() << " out of " << graphs.graphData.size() << " total graphs (" << unique_graph_ids.size() * 100.0 / graphs.graphData.size() << "%)\n";
+
+    // Check whether the paths have been computed
+    if (std::filesystem::exists(edit_path_output_db + db + "_edit_paths.bgf")) {
+        std::cout << "Edit paths for " << db << " already exist at " << edit_path_output_db + db + "_edit_paths.bgf" << std::endl;
+        // Mention that one have to check if the paths are all that one wanted to compute
+        std::cout << "Check if the paths are those you want to use!" << std::endl;
+        return 0;
     }
     // print info about number of valid results considered
     CreateAllEditPaths(valid_results, graphs,  edit_path_output_db, seed, connected_only, edit_path_strategies);
