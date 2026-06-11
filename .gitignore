@@ -17,3 +17,16 @@
 .security-key
 logs/security/
 /Test/
+
+# Project data and directories
+.claude/
+data/
+dataset/
+issues/
+Results_New/
+
+# Python cache
+__pycache__/
+*.pyc
+python_src/Results/
+python_src/data/
