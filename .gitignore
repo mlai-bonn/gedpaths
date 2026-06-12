@@ -37,6 +37,9 @@ python_src/data/
 # IDE build directories
 cmake-build-*/
 
+# GUROBI solver log
+gurobi.log
+
 # Tooling metadata
 .eldrun/
 project.json

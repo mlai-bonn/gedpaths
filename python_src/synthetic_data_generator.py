@@ -3,17 +3,21 @@
 Generator for synthetic graph datasets in TU Dortmund text format.
 
 Currently provides the TRIANGLE_SQUARE dataset:
-  100 connected Erdos-Renyi base graphs G(n=10, p=0.3). Each graph gets a new
-  node u attached via an edge (v, u) at a uniformly random base node v, and the
-  class motif is glued onto this edge:
-    label 0: a triangle through (v, u)  -> one extra node w,  edges (v,w), (u,w)
-    label 1: a square   through (v, u)  -> two extra nodes,   cycle v-u-w1-w2-v
+  100 connected Erdos-Renyi base graphs. A pendant edge (v, u) connects a
+  uniformly random base node v to a new node u, and u is a vertex of the class
+  motif attached behind it:
+    label 0: base G(11, p) + triangle u-w1-w2      (motif: 3 nodes)
+    label 1: base G(10, p) + square   u-w1-w2-w3   (motif: 4 nodes)
+  The triangle base has one extra node so both classes have the same total
+  number of nodes (nodes + 4 = 14 with the defaults).
   50 graphs per class, shuffled with a fixed seed.
 
 The output is written to <dest>/<db>/ as <db>_A.txt, <db>_graph_indicator.txt,
 <db>_graph_labels.txt, <db>_node_labels.txt and <db>_edge_labels.txt, so the
 existing pipeline (CreateMappings) picks it up like any TU dataset and converts
-it to BGF in Data/ProcessedGraphs/.
+it to BGF in Data/ProcessedGraphs/. Additionally, <processed_dest>/
+<db>_motif_nodes.json records per graph the attachment node v and the motif
+node indices (per-graph, 0-based) so the motif can be recovered downstream.
 
 Usage:
   python python_src/synthetic_data_generator.py -db TRIANGLE_SQUARE
@@ -22,10 +26,12 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import random
 
 DEFAULT_DEST = os.path.join("Data", "Graphs")
+DEFAULT_PROCESSED_DEST = os.path.join("Data", "ProcessedGraphs")
 SYNTHETIC_DATASETS = ["TRIANGLE_SQUARE"]
 
 
@@ -57,37 +63,52 @@ def erdos_renyi_connected(num_nodes: int, p: float, rng: random.Random,
 
 
 def build_triangle_square_graph(num_base_nodes: int, p: float, label: int,
-                                rng: random.Random) -> tuple[int, list[tuple[int, int]]]:
-    """Return (num_nodes, edges) for one TRIANGLE_SQUARE graph with the given label."""
-    edges = erdos_renyi_connected(num_base_nodes, p, rng)
-    v = rng.randrange(num_base_nodes)
-    u = num_base_nodes  # node attached via the new edge
+                                rng: random.Random) -> tuple[int, list[tuple[int, int]], int, list[int]]:
+    """Return (num_nodes, edges, attachment_node, motif_nodes) for one graph.
+
+    A pendant edge (v, u) connects a random base node v to the new node u,
+    which is a vertex of the attached motif. The triangle base gets one extra
+    node so both classes end up with num_base_nodes + 4 nodes in total.
+    """
+    base = num_base_nodes + 1 if label == 0 else num_base_nodes
+    edges = erdos_renyi_connected(base, p, rng)
+    v = rng.randrange(base)
+    u = base  # new node: far endpoint of the pendant edge, vertex of the motif
     edges.append((v, u))
     if label == 0:
-        # triangle through the edge (v, u)
-        w = num_base_nodes + 1
-        edges.append((v, w))
-        edges.append((u, w))
-        num_nodes = num_base_nodes + 2
+        # triangle u-w1-w2 behind the pendant edge
+        w1, w2 = base + 1, base + 2
+        edges += [(u, w1), (w1, w2), (w2, u)]
+        num_nodes = base + 3
+        motif_nodes = [u, w1, w2]
     else:
-        # square through the edge (v, u): cycle v-u-w1-w2-v
-        w1 = num_base_nodes + 1
-        w2 = num_base_nodes + 2
-        edges.append((u, w1))
-        edges.append((w1, w2))
-        edges.append((w2, v))
-        num_nodes = num_base_nodes + 3
-    return num_nodes, edges
+        # square u-w1-w2-w3 behind the pendant edge
+        w1, w2, w3 = base + 1, base + 2, base + 3
+        edges += [(u, w1), (w1, w2), (w2, w3), (w3, u)]
+        num_nodes = base + 4
+        motif_nodes = [u, w1, w2, w3]
+    return num_nodes, edges, v, motif_nodes
 
 
 def generate_triangle_square(num_graphs: int, num_base_nodes: int, p: float,
-                             seed: int) -> tuple[list[tuple[int, list[tuple[int, int]]]], list[int]]:
+                             seed: int) -> tuple[list[tuple[int, list[tuple[int, int]]]],
+                                                 list[int], list[dict]]:
     rng = random.Random(seed)
     labels = [0] * (num_graphs // 2) + [1] * (num_graphs - num_graphs // 2)
     rng.shuffle(labels)
-    graphs = [build_triangle_square_graph(num_base_nodes, p, label, rng)
-              for label in labels]
-    return graphs, labels
+    graphs = []
+    motif_info = []
+    for graph_id, label in enumerate(labels):
+        num_nodes, edges, v, motif_nodes = build_triangle_square_graph(
+            num_base_nodes, p, label, rng)
+        graphs.append((num_nodes, edges))
+        motif_info.append({
+            "graph_id": graph_id,
+            "label": label,
+            "attachment_node": v,
+            "motif_nodes": motif_nodes,
+        })
+    return graphs, labels, motif_info
 
 
 def write_tu_format(db: str, dest: str,
@@ -134,13 +155,18 @@ def main() -> int:
     parser.add_argument("--num_graphs", type=int, default=100,
                         help="Total number of graphs, split evenly over both classes (default: 100)")
     parser.add_argument("--nodes", type=int, default=10,
-                        help="Number of nodes of the random base graph (default: 10)")
+                        help="Base graph size of the square class; the triangle class "
+                             "uses one node more so both classes have nodes+4 nodes "
+                             "in total (default: 10)")
     parser.add_argument("--p", type=float, default=0.3,
                         help="Erdos-Renyi edge probability of the base graph (default: 0.3)")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed (default: 42)")
     parser.add_argument("--dest", default=DEFAULT_DEST,
                         help=f"Output root directory (default: {DEFAULT_DEST})")
+    parser.add_argument("--processed_dest", default=DEFAULT_PROCESSED_DEST,
+                        help="Directory for the motif-nodes JSON "
+                             f"(default: {DEFAULT_PROCESSED_DEST})")
     parser.add_argument("--force", action="store_true",
                         help="Regenerate even if the dataset directory already exists")
     args = parser.parse_args()
@@ -150,18 +176,27 @@ def main() -> int:
         print(f"Dataset {args.db} already exists at {out_dir} (use --force to regenerate).")
         return 0
 
-    graphs, labels = generate_triangle_square(args.num_graphs, args.nodes, args.p, args.seed)
+    graphs, labels, motif_info = generate_triangle_square(args.num_graphs, args.nodes,
+                                                          args.p, args.seed)
     readme = (
         f"{args.db}: synthetic dataset generated by python_src/synthetic_data_generator.py\n\n"
         f"{args.num_graphs} graphs, {labels.count(0)} of class 0 and {labels.count(1)} of class 1.\n"
-        f"Each graph is a connected Erdos-Renyi base graph G({args.nodes}, {args.p}).\n"
-        f"A new node u is attached via an edge (v, u) at a random base node v, and the\n"
-        f"class motif is glued onto this edge:\n"
-        f"  label 0: triangle through (v, u) (one extra node)  -> {args.nodes + 2} nodes\n"
-        f"  label 1: square through (v, u) (two extra nodes)   -> {args.nodes + 3} nodes\n"
+        f"Each graph is a connected Erdos-Renyi base graph; a pendant edge (v, u) connects\n"
+        f"a random base node v to a new node u, which is a vertex of the class motif:\n"
+        f"  label 0: base G({args.nodes + 1}, {args.p}) + triangle u-w1-w2    -> {args.nodes + 4} nodes\n"
+        f"  label 1: base G({args.nodes}, {args.p}) + square u-w1-w2-w3 -> {args.nodes + 4} nodes\n"
+        f"Both classes have the same total number of nodes ({args.nodes + 4}).\n"
+        f"The attachment node v and the motif node indices (per-graph, 0-based) of each\n"
+        f"graph are stored in {args.processed_dest}/{args.db}_motif_nodes.json.\n"
         f"All node and edge labels are 0. Seed: {args.seed}.\n"
     )
     out_dir = write_tu_format(args.db, args.dest, graphs, labels, readme)
+
+    os.makedirs(args.processed_dest, exist_ok=True)
+    motif_path = os.path.join(args.processed_dest, f"{args.db}_motif_nodes.json")
+    with open(motif_path, "w") as f:
+        json.dump(motif_info, f, indent=2)
+    print(f"Motif node info written to {motif_path}")
 
     num_nodes_total = sum(n for n, _ in graphs)
     num_edges_total = sum(len(e) for _, e in graphs)
