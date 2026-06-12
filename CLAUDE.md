@@ -9,7 +9,7 @@ GEDPaths computes graph edit distance (GED) mappings between graph pairs (via GE
 ## External Dependencies (required to build)
 
 - The sibling repository `../libGraph` must be cloned next to this repo (CMake hardcodes `LIBGRAPH_ROOT ../libGraph`), with GEDLIB cloned into `libGraph/external/gedlib`.
-- **GUROBI 12.0.3** is required (set `GUROBI_HOME`); the exact MIP-based GED methods (F1, F2, COMPACT_MIP) only exist when GEDLIB is compiled with GUROBI. See INSTALLATION.md.
+- **GUROBI 12.0.3** is required (set `GUROBI_HOME`); the exact MIP-based GED methods (F1, F2, COMPACT_MIP) only exist when GEDLIB is compiled with GUROBI. See docs/INSTALLATION.md.
 
 ## Build and Run
 
@@ -45,6 +45,6 @@ Python scripts expect the repo root on `PYTHONPATH` (experiment.sh exports it).
 ## Code Layout Notes
 
 - C++ entry points are the `.cpp` files at repo root; their implementations live in headers under `src/` (header-only style, e.g. `src/create_edit_paths.h`). `src/include.h` is the shared include.
-- GED method names/options (and their GEDLIB defaults) are documented in `METHODS.md` (in German). MIP methods accept GUROBI options like `--time-limit`.
+- GED method names/options (and their GEDLIB defaults) are documented in `docs/METHODS.md` (in German). MIP methods accept GUROBI options like `--time-limit`.
 - `Data/`, `Results/`, `build/`, `_archive/` are generated/ignored — don't commit their contents. `_archive/` holds parked legacy data (old `Results_New/`, stray `data/`/`dataset/` download caches) and is not used by any code.
 - Binary formats: `.bin` (mappings/paths, internal) and `.bgf` (graph format read by the Python converter; reader assumes little-endian, configurable `size_t` width of 8 or 4 bytes).

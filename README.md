@@ -2,7 +2,7 @@
 gedpaths builds on [libGraph](https://github.com/mlai-bonn/libGraph) and [gedlib](https://github.com/dbblumenthal/gedlib) to compute graph edit distance (GED) mappings between pairs of graphs and turn them into *edit paths* — sequences of intermediate graphs — for GNN experiments.
 
 ## Installation
-See [INSTALLATION.md](INSTALLATION.md) for all dependencies and detailed setup instructions.
+See [INSTALLATION.md](docs/INSTALLATION.md) for all dependencies and detailed setup instructions.
 
 ## Repository layout
 
@@ -10,7 +10,6 @@ See [INSTALLATION.md](INSTALLATION.md) for all dependencies and detailed setup i
 - `Results/` — all pipeline outputs: `Mappings/<METHOD>/<DB>/` and `Paths_<STRATEGY>/<METHOD>/<DB>/`
 - `src/` — C++ implementations (header-only); the `.cpp` entry points live at the repo root
 - `python_src/` — data loading, conversion to PyTorch Geometric, visualization, and WL analysis
-- `specs/`, `issues/`, `analysis/` — planning notes, archived issue logs, and analysis reports
 - `_archive/` — parked legacy data folders (old experiment outputs and stray download caches); not used by any code and not committed
 
 
@@ -81,7 +80,7 @@ Each step below explains *what the stage does* and how it feeds the next one. St
 
 ## Usage
 
-
+See [EXAMPLES.md](docs/EXAMPLES.md) for ready-to-run `CreateMappings` / `CreatePaths` command examples across methods and path strategies, and [METHODS.md](docs/METHODS.md) for the GED methods and their options.
 
 ### 1. Compute Mappings
 - **Download a dataset** from [TUDortmund](https://chrsmrrs.github.io/datasets/) or use your own graphs in the same format in the `Data/Graphs/` folder.
@@ -181,6 +180,6 @@ python python_src/converter/bgf_to_pt.py \
 ---
 
 ## For the exact solvers (e.g., F1, F2)
-You need GUROBI 12.0.3 installed and properly configured. See [GUROBI 12.0.3 Installation](INSTALLATION.md#install-gurobi-1203-linux).
+You need GUROBI 12.0.3 installed and properly configured. See [GUROBI 12.0.3 Installation](docs/INSTALLATION.md#install-gurobi-1203-linux).
 
 ---
