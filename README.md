@@ -31,7 +31,7 @@ chmod u+x experiment.sh
 
 ### Pipeline
 
-![GEDPaths pipeline](docs/pipeline.svg)
+![gedpaths pipeline](docs/pipeline.svg)
 
 For each dataset, `experiment.sh` runs the following stages; each stage reads the output of the previous one:
 

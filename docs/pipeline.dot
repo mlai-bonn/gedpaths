@@ -1,13 +1,13 @@
-// GEDPaths pipeline diagram.
+// gedpaths pipeline diagram.
 // Render with:
 //   dot -Tpng docs/pipeline.dot -o docs/pipeline.png
 //   dot -Tsvg docs/pipeline.dot -o docs/pipeline.svg
-digraph GEDPaths {
+digraph gedpaths {
     rankdir=TB;
     bgcolor="white";
     fontname="Helvetica";
     labelloc="t";
-    label=<<B>GEDPaths pipeline</B><BR/>(experiment.sh, per dataset)>;
+    label=<<B>gedpaths pipeline</B><BR/>(experiment.sh, per dataset)>;
 
     node [shape=box, style="rounded,filled", fontname="Helvetica",
           fontsize=11, margin="0.18,0.12"];
