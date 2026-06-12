@@ -19,7 +19,13 @@ inline int create_edit_paths( const std::string& db,
                               const std::vector<std::string>& path_strategies = {"Random"},
                               const int source_id = -1,
                               const int target_id = -1) {
-        std::vector<EditPathStrategy> edit_path_strategies = StringsToEditPathStrategies(path_strategies);
+    std::vector<EditPathStrategy> edit_path_strategies;
+    try {
+        edit_path_strategies = StringsToEditPathStrategies(path_strategies);
+    } catch (const std::exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
     if (!GetValidStrategy(edit_path_strategies)) {
         std::cerr << "Error: Invalid edit path strategies specified." << std::endl;
         return 1;

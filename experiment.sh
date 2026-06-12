@@ -14,15 +14,27 @@ RECOMPILE_THREADS=""
 ONLY_EVAL="no"
 ONLY_PYTHON="no"
 PATH_STRATEGIES=("Rnd" "Rnd_d-IsoN" "i-E_d-IsoN" "d-E_d-IsoN")
+PATH_STRATEGIES_SET="no"
+
+# Maps strategy shorthand (used in Results/Paths_<STRATEGY>/ and the Python scripts)
+# to the -path_strategy arguments expected by CreatePaths
+declare -A STRATEGY_ARGS=(
+  [Rnd]="Random"
+  [Rnd_d-IsoN]="Random DeleteIsolatedNodes"
+  [i-E_d-IsoN]="InsertEdges DeleteIsolatedNodes"
+  [d-E_d-IsoN]="DeleteEdges DeleteIsolatedNodes"
+)
 
 usage() {
   cat <<EOF
 Usage: $0 [options]
 
 Options:
-  -db <dataset>        Dataset name(s) (default: ${DB_NAME}). Accepts comma-separated
+  -db <dataset>        Dataset name(s) (default: ${DB_NAMES[*]}). Accepts comma-separated
                        lists and can be repeated, e.g. -db MUTAG,ENZYMES -db PROTEINS.
   -method <method>     Method name to use (default: ${METHOD})
+  -path_strategy <s>   Path strategy shorthand(s) (default: ${PATH_STRATEGIES[*]}).
+                       Accepts comma-separated lists and can be repeated.
   -env <venv_path>     Path to virtual environment (default: ${VENV_PATH})
   -recompile [threads] Recompile the C++ code (optional threads). If threads omitted, defaults to half of available CPUs.
   -only_evaluation     Only run evaluation/analysis (don't compute mappings or paths)
@@ -70,6 +82,24 @@ while [[ $# -gt 0 ]]; do
       METHOD="$2"
       shift 2
       ;;
+    -path_strategy|--path-strategy)
+      if [[ -z "${2:-}" || "${2:0:1}" == "-" ]]; then
+        echo "Error: -path_strategy requires an argument"
+        usage
+        exit 1
+      fi
+      if [[ "${PATH_STRATEGIES_SET}" != "yes" ]]; then
+        PATH_STRATEGIES=()
+        PATH_STRATEGIES_SET="yes"
+      fi
+      IFS="," read -r -a parsed_strategies <<< "$2"
+      for strategy in "${parsed_strategies[@]}"; do
+        if [[ -n "$strategy" ]]; then
+          PATH_STRATEGIES+=("$strategy")
+        fi
+      done
+      shift 2
+      ;;
     -recompile|--recompile)
       RECOMPILE="recompile"
       # optional numeric argument: number of threads
@@ -106,7 +136,16 @@ done
 
 echo "Using datasets: ${DB_NAMES[*]}"
 echo "Using method: ${METHOD}"
+echo "Using path strategies: ${PATH_STRATEGIES[*]}"
 echo "Using virtual environment path: ${VENV_PATH}"
+
+# Validate strategies early so typos fail before any computation
+for STRATEGY in "${PATH_STRATEGIES[@]}"; do
+  if [[ -z "${STRATEGY_ARGS[${STRATEGY}]:-}" ]]; then
+    echo "Error: unknown path strategy ${STRATEGY} (known: ${!STRATEGY_ARGS[*]})"
+    exit 1
+  fi
+done
 
 # Create or activate virtual environment
 if [[ ! -f "${VENV_PATH}/bin/activate" ]]; then
@@ -219,24 +258,8 @@ for DB_NAME in "${DB_NAMES[@]}"; do
     if [[ -x "build/CreatePaths" ]]; then
       cd build || exit 1
       for STRATEGY in "${PATH_STRATEGIES[@]}"; do
-        case "${STRATEGY}" in
-          Rnd)
-            ./CreatePaths -db "${DB_NAME}" -method "${METHOD}" -path_strategy Random
-            ;;
-          Rnd_d-IsoN)
-            ./CreatePaths -db "${DB_NAME}" -method "${METHOD}" -path_strategy Random DeleteIsolatedNodes
-            ;;
-          i-E_d-IsoN)
-            ./CreatePaths -db "${DB_NAME}" -method "${METHOD}" -path_strategy InsertEdges DeleteIsolatedNodes
-            ;;
-          d-E_d-IsoN)
-            ./CreatePaths -db "${DB_NAME}" -method "${METHOD}" -path_strategy DeleteEdges DeleteIsolatedNodes
-            ;;
-          *)
-            echo "Error: unknown path strategy ${STRATEGY}"
-            exit 1
-            ;;
-        esac
+        # shellcheck disable=SC2086 -- STRATEGY_ARGS entries are intentionally word-split
+        ./CreatePaths -db "${DB_NAME}" -method "${METHOD}" -path_strategy ${STRATEGY_ARGS[${STRATEGY}]}
       done
       cd .. || exit 1
     else
@@ -253,7 +276,8 @@ for DB_NAME in "${DB_NAMES[@]}"; do
       echo "Analyzing path graphs..."
       cd build || exit 1
       for STRATEGY in "${PATH_STRATEGIES[@]}"; do
-        ./AnalyzePaths -db "${DB_NAME}" -method "${METHOD}" -path_strategy "${STRATEGY}"
+        # shellcheck disable=SC2086 -- STRATEGY_ARGS entries are intentionally word-split
+        ./AnalyzePaths -db "${DB_NAME}" -method "${METHOD}" -path_strategy ${STRATEGY_ARGS[${STRATEGY}]}
       done
       cd .. || exit 1
     else
@@ -281,7 +305,7 @@ for DB_NAME in "${DB_NAMES[@]}"; do
   # do wl analysis of the dataset graphs
   echo "Performing WL analysis of dataset graphs..."
   for STRATEGY in "${PATH_STRATEGIES[@]}"; do
-    python python_src/wl_analysis.py -db "${DB_NAME}" -s "${STRATEGY}"
+    python python_src/wl_analysis.py -db "${DB_NAME}" --method "${METHOD}" --path_strategy "${STRATEGY}"
   done
 
   # plot a an example edit path

@@ -11,6 +11,16 @@ RECOMPILE="no"
 RECOMPILE_THREADS=""
 ONLY_EVAL="no"
 ONLY_PYTHON="no"
+PATH_STRATEGIES=("Rnd" "Rnd_d-IsoN" "i-E_d-IsoN" "d-E_d-IsoN")
+
+# Maps strategy shorthand (used in Results/Paths_<STRATEGY>/ and the Python scripts)
+# to the -path_strategy arguments expected by CreatePaths
+declare -A STRATEGY_ARGS=(
+  [Rnd]="Random"
+  [Rnd_d-IsoN]="Random DeleteIsolatedNodes"
+  [i-E_d-IsoN]="InsertEdges DeleteIsolatedNodes"
+  [d-E_d-IsoN]="DeleteEdges DeleteIsolatedNodes"
+)
 
 usage() {
   cat <<EOF
@@ -193,10 +203,10 @@ else
   echo "Creating path graphs with different strategies..."
   if [[ -x "build/CreatePaths" ]]; then
     cd build || exit 1
-    ./CreatePaths -db "${DB_NAME}" -method F2 -path_strategy Random
-    ./CreatePaths -db "${DB_NAME}" -method F2 -path_strategy Random DeleteIsolatedNodes
-    ./CreatePaths -db "${DB_NAME}" -method F2 -path_strategy InsertEdges DeleteIsolatedNodes
-    ./CreatePaths -db "${DB_NAME}" -method F2 -path_strategy DeleteEdges DeleteIsolatedNodes
+    for STRATEGY in "${PATH_STRATEGIES[@]}"; do
+      # shellcheck disable=SC2086 -- STRATEGY_ARGS entries are intentionally word-split
+      ./CreatePaths -db "${DB_NAME}" -method F2 -path_strategy ${STRATEGY_ARGS[${STRATEGY}]}
+    done
     cd .. || exit 1
   else
     echo "Error: build/CreatePaths not found or not executable. Did the build succeed?"
@@ -211,10 +221,10 @@ else
   if [[ -x "build/AnalyzePaths" ]]; then
     echo "Analyzing path graphs..."
     cd build || exit 1
-    ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy Rnd
-    ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy Rnd_d-IsoN
-    ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy i-E_d-IsoN
-    ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy d-E_d-IsoN
+    for STRATEGY in "${PATH_STRATEGIES[@]}"; do
+      # shellcheck disable=SC2086 -- STRATEGY_ARGS entries are intentionally word-split
+      ./AnalyzePaths -db "${DB_NAME}" -method F2 -path_strategy ${STRATEGY_ARGS[${STRATEGY}]}
+    done
     cd .. || exit 1
   else
     echo "Error: build/AnalyzePaths not found or not executable. Did the build succeed?"
@@ -229,34 +239,27 @@ export PYTHONPATH="$(pwd)${PYTHONPATH:+:}${PYTHONPATH:-}"
 
 # convert the generated path graphs to pytorch-geometric format
 echo "Converting path graphs to pytorch-geometric format..."
-python python_src/converter/bgf_to_pt.py --db "${DB_NAME}" --method F2 --path_strategy Rnd
-python python_src/converter/bgf_to_pt.py --db "${DB_NAME}" --method F2 --path_strategy Rnd_d-IsoN
-python python_src/converter/bgf_to_pt.py --db "${DB_NAME}" --method F2 --path_strategy i-E_d-IsoN
-python python_src/converter/bgf_to_pt.py --db "${DB_NAME}" --method F2 --path_strategy d-E_d-IsoN
-
-
+for STRATEGY in "${PATH_STRATEGIES[@]}"; do
+  python python_src/converter/bgf_to_pt.py --db "${DB_NAME}" --method F2 --path_strategy "${STRATEGY}"
+done
 
 # plot the statistics with python
 echo "Plotting statistics..."
-python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method F2 --path_strategy Rnd
-python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method F2 --path_strategy Rnd_d-IsoN
-python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method F2 --path_strategy i-E_d-IsoN
-python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method F2 --path_strategy d-E_d-IsoN
+for STRATEGY in "${PATH_STRATEGIES[@]}"; do
+  python python_src/visualization/plot_edit_path_stats.py --db "${DB_NAME}" --method F2 --path_strategy "${STRATEGY}"
+done
 
 # do wl analysis of the dataset graphs
 echo "Performing WL analysis of dataset graphs..."
-python python_src/wl_analysis.py -db "${DB_NAME}" -s Rnd
-python python_src/wl_analysis.py -db "${DB_NAME}" -s Rnd_d-IsoN
-python python_src/wl_analysis.py -db "${DB_NAME}" -s i-E_d-IsoN
-python python_src/wl_analysis.py -db "${DB_NAME}" -s d-E_d-IsoN
+for STRATEGY in "${PATH_STRATEGIES[@]}"; do
+  python python_src/wl_analysis.py -db "${DB_NAME}" --method F2 --path_strategy "${STRATEGY}"
+done
 
-
-# plot a an example edit path
+# plot an example edit path
 echo "Plotting example edit paths..."
-python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy Rnd --start 3 --end 77
-python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy Rnd_d-IsoN --start 3 --end 77
-python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy i-E_d-IsoN --start 3 --end 77
-python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy d-E_d-IsoN --start 3 --end 77
+for STRATEGY in "${PATH_STRATEGIES[@]}"; do
+  python python_src/visualization/plot_edit_path.py --db "${DB_NAME}" --method F2 --path_strategy "${STRATEGY}" --start 3 --end 77
+done
 
 
 

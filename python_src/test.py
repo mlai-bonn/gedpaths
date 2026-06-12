@@ -5,7 +5,8 @@ def main():
     # load GEDDataset from torch_geometric.datasets
     # import molhiv dataset from ogb package
     from ogb.graphproppred import PygGraphPropPredDataset
-    dataset = PygGraphPropPredDataset(name="ogbg-code2")
+    # explicit root matches precomputed_targets.py and avoids creating a stray dataset/ folder
+    dataset = PygGraphPropPredDataset(name="ogbg-code2", root="Data/RawTargets/ogb")
     print(f"Dataset length: {len(dataset)}")
 
     # get all graphs up to size 16 nodes and get their y value and write it to targets.txt under Results/Mappings/Precomputed/molhiv-16

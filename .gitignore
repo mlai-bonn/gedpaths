@@ -30,3 +30,16 @@ __pycache__/
 *.pyc
 python_src/Results/
 python_src/data/
+
+# Archived legacy data (kept locally, never committed)
+/_archive/
+
+# IDE build directories
+cmake-build-*/
+
+# Tooling metadata
+.eldrun/
+project.json
+.auto-claude-security.json
+.auto-claude-status
+.claude_settings.json

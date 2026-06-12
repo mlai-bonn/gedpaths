@@ -187,6 +187,16 @@ int main(int argc, const char * argv[]) {
         strategy_sets.push_back(path_strategies);
     }
 
+    // validate strategy tokens upfront so an invalid name fails before any computation
+    for (const auto& current_path_strategies : strategy_sets) {
+        try {
+            StringsToEditPathStrategies(current_path_strategies);
+        } catch (const std::exception& e) {
+            std::cerr << "Error: " << e.what() << std::endl;
+            return 1;
+        }
+    }
+
     bool processed_any_dataset = false;
     for (const auto& current_db : databases) {
         const std::filesystem::path mapping_file = std::filesystem::path(mappings_path) / method / current_db / (current_db + "_ged_mapping.bin");
