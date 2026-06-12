@@ -1,5 +1,5 @@
 # GEDPaths
-Repo that builds up on the libgraph and uses the GEDLIB to create edit paths between two pairs of graphs from different sources.
+Repo that builds up on [libGraph](https://github.com/mlai-bonn/libGraph) and uses [gedlib](https://github.com/dbblumenthal/gedlib) to create edit paths between two pairs of graphs from different sources.
 
 ## Installation
 See [INSTALLATION.md](INSTALLATION.md) for all dependencies and detailed setup instructions.
