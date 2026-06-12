@@ -1,5 +1,5 @@
-# GEDPaths
-Repo that builds up on [libGraph](https://github.com/mlai-bonn/libGraph) and uses [gedlib](https://github.com/dbblumenthal/gedlib) to create edit paths between two pairs of graphs from different sources.
+# gedpaths
+gedpaths builds on [libGraph](https://github.com/mlai-bonn/libGraph) and [gedlib](https://github.com/dbblumenthal/gedlib) to compute graph edit distance (GED) mappings between pairs of graphs and turn them into *edit paths* — sequences of intermediate graphs — for GNN experiments.
 
 ## Installation
 See [INSTALLATION.md](INSTALLATION.md) for all dependencies and detailed setup instructions.
