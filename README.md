@@ -32,6 +32,8 @@ chmod u+x experiment.sh
 
 ### Pipeline
 
+![GEDPaths pipeline](docs/pipeline.svg)
+
 For each dataset, `experiment.sh` runs the following stages; each stage reads the output of the previous one:
 
 | # | Stage | Command | Reads | Writes |
@@ -46,6 +48,36 @@ For each dataset, `experiment.sh` runs the following stages; each stage reads th
 | 8 | Weisfeiler-Leman analysis (×4) | `python_src/wl_analysis.py` | `Results/Paths_.../*.bgf` | `Results/Paths_.../WLAnalysis/` |
 
 The four path strategies are `Rnd` (random order), `Rnd_d-IsoN` (random + delete isolated nodes), `i-E_d-IsoN` (insert edges first), and `d-E_d-IsoN` (delete edges first); each gets its own `Results/Paths_<STRATEGY>/` tree. Stages 2 and 4 are skipped with `-only_evaluation`; all C++ stages (2–5) are skipped with `-only_python`.
+
+### Pipeline steps in detail
+
+Each step below explains *what the stage does* and how it feeds the next one. Stages 4–8 run once per path strategy (four times by default).
+
+1. **Download dataset** — `python_src/data_loader.py -db <DB>`
+   Fetches the named [TU Dortmund](https://chrsmrrs.github.io/datasets/) graph dataset and unpacks it into `Data/Graphs/<DB>/`. This is the only step that touches the network; everything afterwards is local. You can skip it by dropping your own graphs (in the same format) into `Data/Graphs/`.
+
+2. **Compute GED mappings** — `build/CreateMappings`
+   Samples random pairs of graphs from the dataset and, for each pair, solves the **graph edit distance** with the chosen method (e.g. `F2`, an exact MIP solved via GUROBI). The result of each solve is a *node-to-node edit mapping* describing how to transform one graph into the other (substitutions, insertions, deletions). Writes `<DB>_ged_mapping.{bin,csv}` plus `graph_ids.txt` (the sampled pairs) under `Results/Mappings/<METHOD>/<DB>/`.
+
+3. **Validate mappings** — `build/AnalyzeMappings`
+   Sanity-checks the mappings from step 2 (each mapping must be a valid edit operation set) and emits aggregate statistics under `Results/Mappings/<METHOD>/<DB>/Evaluation/`. Catches solver failures or malformed mappings before they propagate downstream.
+
+4. **Build edit paths** — `build/CreatePaths`
+   Turns each node mapping into an **edit path**: an ordered sequence of intermediate graphs that morph the source graph into the target, one edit at a time. The `-path_strategy` controls the order of operations (`Rnd`, `Rnd_d-IsoN`, `i-E_d-IsoN`, `d-E_d-IsoN`). Writes `<DB>_edit_paths.{bin,bgf,csv}` under `Results/Paths_<STRATEGY>/<METHOD>/<DB>/`; the `.bgf` is the binary graph format the Python converter reads.
+
+5. **Path statistics** — `build/AnalyzePaths`
+   Computes per-strategy statistics over the generated path graphs (path lengths, graph sizes, edit-operation counts, …) and writes CSV summaries under `Results/Paths_<STRATEGY>/.../Evaluation/`.
+
+6. **Convert to PyTorch Geometric** — `python_src/converter/bgf_to_pt.py`
+   Reads the `.bgf` path graphs and builds a PyTorch Geometric in-memory dataset (`BGFInMemoryDataset`), serialized to `Results/Paths_<STRATEGY>/.../processed/data.pt`. This is the artifact consumed by the GNN experiments.
+
+7. **Plot statistics** — `python_src/visualization/plot_edit_path_stats.py`
+   Renders the step-5 CSVs into plots and summary tables under `Results/Paths_<STRATEGY>/.../Evaluation_Python/` for quick visual inspection.
+
+8. **Weisfeiler-Leman analysis** — `python_src/wl_analysis.py`
+   Runs the Weisfeiler-Leman algorithm over the path graphs (a measure of GNN-distinguishability) and writes results under `Results/Paths_<STRATEGY>/.../WLAnalysis/`.
+
+> The diagram source lives at [`docs/pipeline.dot`](docs/pipeline.dot); regenerate the image with `dot -Tsvg docs/pipeline.dot -o docs/pipeline.svg`.
 
 ## Usage
 
@@ -129,7 +161,22 @@ make -j 6
   - `-path_strategy <strategy...>`: Composable strategy: `Random`, `InsertEdges` or `DeleteEdges`, optionally followed by `DeleteIsolatedNodes`
 
 ### 3. Export to PyTorch Geometric Format
-(Instructions for this step can be added here if needed.)
+
+Convert the `.bgf` path graphs from step 2 into a PyTorch Geometric in-memory dataset:
+
+```bash
+python python_src/converter/bgf_to_pt.py \
+  --db MUTAG \
+  --method F2 \
+  --path_strategy Rnd
+```
+
+**Main arguments:**
+  - `--db <database name>`: Name of the dataset
+  - `--method <method>`: GED method whose paths to convert (e.g. F2)
+  - `--path_strategy <strategy>`: Strategy shorthand (`Rnd`, `Rnd_d-IsoN`, `i-E_d-IsoN`, `d-E_d-IsoN`)
+
+**Output:** a serialized PyG dataset at `Results/Paths_<STRATEGY>/<METHOD>/<DB>/processed/data.pt`, backed by `BGFInMemoryDataset` (see `python_src/converter/bgf_to_torch_geometric.py`). Run the script from the repo root, or ensure the repo root is on `PYTHONPATH` (`experiment.sh` exports it automatically).
 
 ---
 

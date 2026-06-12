@@ -1,0 +1,49 @@
+// GEDPaths pipeline diagram.
+// Render with:
+//   dot -Tpng docs/pipeline.dot -o docs/pipeline.png
+//   dot -Tsvg docs/pipeline.dot -o docs/pipeline.svg
+digraph GEDPaths {
+    rankdir=TB;
+    bgcolor="white";
+    fontname="Helvetica";
+    labelloc="t";
+    label=<<B>GEDPaths pipeline</B><BR/>(experiment.sh, per dataset)>;
+
+    node [shape=box, style="rounded,filled", fontname="Helvetica",
+          fontsize=11, margin="0.18,0.12"];
+    edge [fontname="Helvetica", fontsize=9, color="#555555"];
+
+    // Python stages
+    node [fillcolor="#dbeafe", color="#3b82f6"];
+    s1 [label=<<B>1. Download dataset</B><BR/><FONT POINT-SIZE="9">python_src/data_loader.py</FONT>>];
+    s6 [label=<<B>6. Convert to PyTorch Geometric</B><BR/><FONT POINT-SIZE="9">converter/bgf_to_pt.py</FONT>>];
+    s7 [label=<<B>7. Plot statistics</B><BR/><FONT POINT-SIZE="9">visualization/plot_edit_path_stats.py</FONT>>];
+    s8 [label=<<B>8. Weisfeiler-Leman analysis</B><BR/><FONT POINT-SIZE="9">python_src/wl_analysis.py</FONT>>];
+
+    // C++ stages
+    node [fillcolor="#dcfce7", color="#22c55e"];
+    s2 [label=<<B>2. Compute GED mappings</B><BR/><FONT POINT-SIZE="9">CreateMappings</FONT>>];
+    s3 [label=<<B>3. Validate mappings</B><BR/><FONT POINT-SIZE="9">AnalyzeMappings</FONT>>];
+    s4 [label=<<B>4. Build edit paths (&#215;4 strategies)</B><BR/><FONT POINT-SIZE="9">CreatePaths</FONT>>];
+    s5 [label=<<B>5. Path statistics</B><BR/><FONT POINT-SIZE="9">AnalyzePaths</FONT>>];
+
+    // Data flow
+    s1 -> s2 [label=" Data/Graphs/"];
+    s2 -> s3 [label=" mappings (.bin)"];
+    s2 -> s4 [label=" mappings (.bin)"];
+    s4 -> s5 [label=" paths (.bgf)"];
+    s4 -> s6 [label=" paths (.bgf)"];
+    s4 -> s8 [label=" paths (.bgf)"];
+    s5 -> s7 [label=" stats (.csv)"];
+
+    // Legend
+    subgraph cluster_legend {
+        label="Legend";
+        fontsize=10;
+        style="rounded";
+        color="#cccccc";
+        legend_cpp [label="C++ stage (build/)", fillcolor="#dcfce7", color="#22c55e"];
+        legend_py  [label="Python stage (python_src/)", fillcolor="#dbeafe", color="#3b82f6"];
+        legend_cpp -> legend_py [style=invis];
+    }
+}
